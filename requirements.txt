@@ -1,0 +1,5 @@
+numpy==1.20.3
+pandas==1.4.2
+networkx==2.6.3
+MDAnalysis==2.4.3
+setuptools==62.3.2

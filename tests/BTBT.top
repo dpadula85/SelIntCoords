@@ -1,0 +1,62 @@
+ [ defaults ]
+; nbfunc   comb-rule   gen-pairs  fudgeLJ  fudgeQQ
+     1       3          no       1.0     0.0
+ 
+[ atomtypes ]
+  Cp     12.0110   0.000   A    3.55000e-01  2.92880e-01  ; OPLS_145
+  Hp      1.0079   0.000   A    2.42000e-01  1.25520e-01  ; OPLS_146
+  STh    32.0600   0.000   A    3.55000e-01  1.04600e+00  ; OPLS_633
+  CTh    12.0110   0.000   A    3.55000e-01  2.92880e-01  ; OPLS_145
+  CT     12.0110   0.000   A    3.50000e-01  2.76144e-01  ; OPLS_139
+  HT      1.0079   0.000   A    2.50000e-01  1.25520e-01  ; OPLS_140
+ 
+[ moleculetype ]
+; Name               nrexcl
+DBT                   3
+ 
+[ atoms ]
+;   nr       type  resnr residue  atom   cgnr     charge       mass
+     1       STh     1    DBT    STh      1   -0.074322  32.0600
+     2       Cp      1    DBT    Cp       2   -0.062948  12.0110
+     3       Cp      1    DBT    Cp       3   -0.160941  12.0110
+     4       Cp      1    DBT    Cp       4   -0.084823  12.0110
+     5       Cp      1    DBT    Cp       5   -0.071170  12.0110
+     6       Cp      1    DBT    Cp       6   -0.371284  12.0110
+     7       Cp      1    DBT    Cp       7    0.342163  12.0110
+     8       CTh     1    DBT    CTh      8   -0.139299  12.0110
+     9       CT      1    DBT    CT       9    0.128717  12.0110
+    10       CT      1    DBT    CT      10   -0.155289  12.0110
+    11       Hp      1    DBT    Hp      11    0.192061   1.0080
+    12       Hp      1    DBT    Hp      12    0.125075   1.0080
+    13       Hp      1    DBT    Hp      13    0.208976   1.0080
+    14       HT      1    DBT    HT      14   -0.001853   1.0080
+    15       HT      1    DBT    HT      15   -0.001853   1.0080
+    16       HT      1    DBT    HT      16    0.042264   1.0080
+    17       HT      1    DBT    HT      17    0.042264   1.0080
+    18       STh     1    DBT    STh     18   -0.074322  32.0600
+    19       Cp      1    DBT    Cp      19   -0.062948  12.0110
+    20       Cp      1    DBT    Cp      20   -0.160941  12.0110
+    21       Cp      1    DBT    Cp      21   -0.084823  12.0110
+    22       Cp      1    DBT    Cp      22   -0.071170  12.0110
+    23       Cp      1    DBT    Cp      23   -0.371284  12.0110
+    24       Cp      1    DBT    Cp      24    0.342163  12.0110
+    25       CTh     1    DBT    CTh     25   -0.139299  12.0110
+    26       CT      1    DBT    CT      26    0.128717  12.0110
+    27       CT      1    DBT    CT      27   -0.155289  12.0110
+    28       Hp      1    DBT    Hp      28    0.192061   1.0080
+    29       Hp      1    DBT    Hp      29    0.125075   1.0080
+    30       Hp      1    DBT    Hp      30    0.208976   1.0080
+    31       HT      1    DBT    HT      31   -0.001853   1.0080
+    32       HT      1    DBT    HT      32   -0.001853   1.0080
+    33       HT      1    DBT    HT      33    0.042264   1.0080
+    34       HT      1    DBT    HT      34    0.042264   1.0080
+    35       HT      1    DBT    HT      35    0.042264   1.0080
+    36       HT      1    DBT    HT      36    0.042264   1.0080
+ 
+[ system ]
+; Name
+DBT
+ 
+[ molecules ]
+; Compound        #mols
+DBT                 1
