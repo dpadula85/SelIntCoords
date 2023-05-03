@@ -57,7 +57,7 @@ import textwrap
 import logging
 from collections import OrderedDict as odict
 
-import blocks
+from SelIntCoords import blocks
 
 class TOP(blocks.System):
     """Class to make a TOP object from a GROMACS processed.top file

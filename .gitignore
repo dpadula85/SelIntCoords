@@ -1,0 +1,11 @@
+*.pyc
+*.so
+*.pth
+*egg*
+*build*
+*.pqr
+*.cub
+*.dx
+*.xyz
+*.vmd
+*.pdf

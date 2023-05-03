@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 import argparse as arg
 
-from top import *
-from blocks import *
-from sel_intcoords import list_intcoords
+from .top import *
+from .blocks import *
+from .sel_intcoords import list_intcoords
 
 # Default bond parameters
 bparms = {
