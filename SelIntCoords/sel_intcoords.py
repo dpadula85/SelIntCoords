@@ -488,7 +488,10 @@ def list_intcoords(coordfile):
     # Get improper dihedrals
     impdiheds = []
     for idx in sp2:
-        neighs = [ i for i in nx.all_neighbors(G, idx) ]
+        try:
+            neighs = [ i for i in nx.all_neighbors(G, idx) ]
+        except:
+            neighs = []
         if len(neighs) > 2:
             impdiheds.append([ idx ] + neighs)
 
@@ -528,35 +531,30 @@ def list_intcoords(coordfile):
         LJs14 = LJs14[LJs14[:,0].argsort()]
     except:
         LJs14 = np.asarray(LJs14).reshape(-1, 2)
-        pass
 
     try:
         LJs15 = flip_bigger(np.asarray(LJs15))
         LJs15 = LJs15[LJs15[:,0].argsort()]
     except:
         LJs15 = np.asarray(LJs15).reshape(-1, 2)
-        pass
 
     try:
         LJs16 = flip_bigger(np.asarray(LJs16))
         LJs16 = LJs16[LJs16[:,0].argsort()]
     except:
         LJs16 = np.asarray(LJs16).reshape(-1, 2)
-        pass
 
     try:
         LJs17 = flip_bigger(np.asarray(LJs17))
         LJs17 = LJs17[LJs17[:,0].argsort()]
     except:
         LJs17 = np.asarray(LJs17).reshape(-1, 2)
-        pass
 
     try:
         LJs = flip_bigger(np.asarray(LJs))
         LJs = LJs[LJs[:,0].argsort()]
     except:
         LJs = np.asarray(LJs).reshape(-1, 2)
-        pass
 
     LJs = {
         '1,4' : LJs14,

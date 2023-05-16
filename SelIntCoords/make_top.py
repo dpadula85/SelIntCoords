@@ -85,7 +85,7 @@ def options():
             type=str,
             required=True,
             dest='MolFile',
-            help='''Molecule coordinates (.gro format).'''
+            help='''Molecule coordinates.'''
         )
 
     #
@@ -172,7 +172,10 @@ def add_terms(
         counter += 1
 
     for imp in imps:
-        ai, aj, ak, al = imp
+        try:
+            ai, aj, ak, al = imp
+        except:
+            continue
         dih = blocks.ImproperType('gromacs')
         dih.atom1 = topobj.molecules[0].atoms[ai]
         dih.atom2 = topobj.molecules[0].atoms[aj]
