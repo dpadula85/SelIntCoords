@@ -88,6 +88,16 @@ def options():
             help='''Molecule coordinates.'''
         )
 
+    inp.add_argument(
+            '-l',
+            '--lj',
+            type=str,
+            dest='MixingRule',
+            default='geom',
+            choices = [ 'avg', 'geom' ],
+            help='''LJ mixing rule to use.'''
+        )
+
     #
     # Outut Options
     #
@@ -105,7 +115,72 @@ def options():
     args = parser.parse_args()
     Opts = vars(args)
 
+    if Opts["MixingRule"] == "avg":
+        Opts["MixingRule"] = avg_mixing
+    elif Opts["MixingRule"] == "geom":
+        Opts["MixingRule"] = geom_avg_mixing
+
     return Opts
+
+
+def geom_avg_mixing(ei, ej, si, sj):
+    '''
+    Function compute LJ parameters for a pair of atoms, according to a
+    geometric average mixing rule (see https://manual.gromacs.org/current/reference-manual/functions/nonbonded-interactions.html).
+
+    Parameters
+    ----------
+    ei: float.
+        Epsilon value for atom 1.
+    ej: float.
+        Epsilon value for atom 2.
+    si: float.
+        Sigma value for atom 1.
+    sj: float.
+        Sigma value for atom 2.
+
+    Returns
+    -------
+    eij: float.
+        Epsilon value for the LJ potential term.
+    sij: float.
+        Sigma value for the LJ potential term.
+    '''
+
+    eij = np.sqrt(ei * ej)
+    sij = np.sqrt(si * sj)
+
+    return eij, sij
+
+
+def avg_mixing(ei, ej, si, sj):
+    '''
+    Function compute LJ parameters for a pair of atoms, according to an
+    arithmetic average mixing rule (see https://manual.gromacs.org/current/reference-manual/functions/nonbonded-interactions.html).
+
+    Parameters
+    ----------
+    ei: float.
+        Epsilon value for atom 1.
+    ej: float.
+        Epsilon value for atom 2.
+    si: float.
+        Sigma value for atom 1.
+    sj: float.
+        Sigma value for atom 2.
+
+    Returns
+    -------
+    eij: float.
+        Epsilon value for the LJ potential term.
+    sij: float.
+        Sigma value for the LJ potential term.
+    '''
+
+    eij = np.sqrt(ei * ej)
+    sij = 0.5 * (si + sj)
+
+    return eij, sij
 
 
 def add_terms(
@@ -116,7 +191,8 @@ def add_terms(
         imps=None,
         flexs=None,
         LJs=None,
-        excls=None
+        excls=None,
+        mixing=geom_avg_mixing
     ):
 
     topobj = TOP(topfile)
@@ -209,8 +285,9 @@ def add_terms(
             ej = nb_params[aj]['epsilon']
             sj = nb_params[aj]['sigma']
 
-            eij = np.sqrt(ei * ej)
-            sij = 0.5 * (si + sj)
+            # eij = np.sqrt(ei * ej)
+            # sij = 0.5 * (si + sj)
+            eij, sij = mixing(ei, ej, si, sj)
 
             nb = blocks.InteractionType('gromacs')
             nb.atom1 = topobj.molecules[0].atoms[ai]
@@ -259,7 +336,8 @@ def main():
             impdiheds,
             flex,
             LJs,
-            excls
+            excls,
+            mixing=Opts["MixingRule"]
         )
 
     if not Opts['OutFile']:
