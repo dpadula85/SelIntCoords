@@ -7,6 +7,7 @@ import pandas as pd
 import networkx as nx
 import MDAnalysis as mda
 from MDAnalysis.lib.util import unique_rows
+from pyscf.symm.geom import detect_symm, symm_identical_atoms
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -392,6 +393,35 @@ def get_equivalent_hydrogens(u, G):
     return eq_hs
 
 
+def get_equivalent_atoms(u):
+    '''
+    Function to get equivalent atoms in a molecule from symmetry point group.
+    For this to work the geometry of the molecule needs to be aligned to the
+    cartesian axes.
+
+    Parameters
+    ----------
+    u: object.
+        MDAnalysis Universe representing the molecule.
+
+    Returns
+    -------
+    eq_ats: dict.
+        Dictionary of equivalent atoms.
+    '''
+
+    atoms = np.asarray(list(zip(u.atoms.types, u.atoms.positions)))
+    point_group, coq, axes = detect_symm(atoms)
+    eqs = symm_identical_atoms(point_group, atoms)
+
+    eq_ats = {}
+    for group in eqs:
+        for i, at in enumerate(group):
+            eq_ats[at] = np.delete(group, i)
+
+    return eq_ats
+
+
 def list_intcoords(coordfile):
     '''
     Function to obtain a set of internal coordinates for force field 
@@ -445,8 +475,26 @@ def list_intcoords(coordfile):
         'full' : frings
     }
 
-    # Get equivalent Hs
+    # Get equivalent atoms and Hs
+    # This contains equivalences by symmetry
+    eq_ats = get_equivalent_atoms(u)
+
+    # This contains equivalences by connectivity, i.e. local symmetry
     eq_hs = get_equivalent_hydrogens(u, G)
+
+    # Join the two equivalences
+    eq = {}
+    for k, v in sorted(eq_ats.items()):
+        try:
+            all_eqs = np.r_[ v, eq_hs[k] ]
+            for h in v:
+                all_eqs = np.r_[ all_eqs, eq_hs[h] ]
+            eq[k] = np.sort(all_eqs)
+        except:
+            eq[k] = v
+
+    # Figure out how to use equivalence to reduce internal coordinates and to
+    # set up dependencies
 
     # Get angles
     angles = []
