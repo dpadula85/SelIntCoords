@@ -617,7 +617,7 @@ def list_intcoords(coordfile):
     excls = flip_bigger(np.vstack(list(map(np.ravel, e))).T)
     excls = excls[excls[:,0] != excls[:,1]]
 
-    return bds, angles, stiff, impdiheds, flex, LJs, excls, rings
+    return bds, angles, stiff, impdiheds, flex, LJs, excls, rings, eq
 
 
 if __name__ == '__main__':

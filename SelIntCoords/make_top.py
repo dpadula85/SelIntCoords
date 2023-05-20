@@ -326,7 +326,7 @@ def main():
     # Read in topology
     topfile = Opts['TopFile']
     data = list_intcoords(Opts['MolFile'])
-    bds, angles, stiff, impdiheds, flex, LJs, excls, rings = data
+    bds, angles, stiff, impdiheds, flex, LJs, excls, rings, eq = data
 
     topobj = add_terms(
             topfile,
