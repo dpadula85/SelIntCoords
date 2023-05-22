@@ -488,7 +488,7 @@ def main():
         f.write("$dependence 1.2\n")
         for k, v in deps_dict.items():
             for vv in v:
-                f.write("%5d = 1.d0*%-5d\n" % (vv, k))
+                f.write("%5d = %5d*1.d0 ;\n" % (vv, k))
         f.write("$end")
 
     return
