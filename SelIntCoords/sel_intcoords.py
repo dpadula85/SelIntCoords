@@ -458,6 +458,14 @@ def list_intcoords(coordfile):
 
     u = mda.Universe(coordfile, guess_bonds=True)
 
+    # This does not replicate GView's Symmetryze behaviour
+    # # align principal axes to cartesian reference frame
+    # com = u.atoms.center_of_mass()
+    # I = u.atoms.principal_axes()
+    # M = np.linalg.inv(I)
+    # newx = M.dot((u.atoms.positions.copy() - com).T).T
+    # u.atoms.positions = newx
+
     # Get bonds
     bds = u.bonds.to_indices()
 
