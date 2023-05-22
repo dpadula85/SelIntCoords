@@ -5,10 +5,11 @@ import csv
 import numpy as np
 import pandas as pd
 import argparse as arg
+from itertools import product
 
 from .top import *
 from .blocks import *
-from .sel_intcoords import list_intcoords
+from .sel_intcoords import list_intcoords, flip_bigger, flatten
 
 # Default bond parameters
 bparms = {
@@ -319,15 +320,56 @@ def add_terms(
     return topobj
 
 
+def find_deps(coords, eqs):
+
+    for c, coord in enumerate(coords):
+
+        transl = [ eqs[i] for i in coord ]
+
+        # do all possible partial substitutions
+        subs = np.asarray([ list(i) for i in product(*transl) ])
+
+        # check if any of the generated coordinates is in the initial set
+        mask = (coords[:,None] == subs).all(axis=-1).any(axis=-1)
+
+        # get their indices in the set of coordinates
+        idxs = np.where(mask)[0]
+
+        # combine them with the index of current coordinate being checked
+        eqcoords = np.c_[ np.ones_like(idxs) * c, idxs ]
+
+        # remove self-equivalent coordinates
+        eqcoords = eqcoords[eqcoords[:,0] != eqcoords[:,1]]
+
+        try:
+            equivs = np.r_[ equivs, eqcoords ]
+        except:
+            equivs = eqcoords
+
+    # smaller coordinate first, and ordered by first coord
+    # deal with no equivalences found
+    try:
+        equivs = flip_bigger(equivs)
+        equivs = equivs[equivs[:,1].argsort()]
+        equivs = equivs[equivs[:,0].argsort(kind='mergesort')]
+    except:
+        equivs = np.empty((1, 2))
+
+    return equivs
+
+
 def main():
 
     Opts = options()
 
     # Read in topology
     topfile = Opts['TopFile']
+
+    # Get internal coordinates and other information from geometry
     data = list_intcoords(Opts['MolFile'])
     bds, angles, stiff, impdiheds, flex, LJs, excls, rings, eq = data
 
+    # Create Topology
     topobj = add_terms(
             topfile,
             bds,
@@ -340,13 +382,17 @@ def main():
             mixing=Opts["MixingRule"]
         )
 
+    # Create output file names
     if not Opts['OutFile']:
         outfile = '.'.join(Opts['TopFile'].split(".")[:-1]) + '.new.top'
         outcsv = '.'.join(Opts['TopFile'].split(".")[:-1]) + '.csv'
+        outdeps = '.'.join(Opts['TopFile'].split(".")[:-1]) + '_deps.dat'
     else:
         outfile = Opts['OutFile']
         outcsv = '.'.join(Opts['OutFile'].split(".")[:-1]) + '.csv'
+        outdeps = '.'.join(Opts['OutFile'].split(".")[:-1]) + '_deps.dat'
 
+    # Write topology and additional information on internal coordinates
     topobj.write(outfile)
 
     df = pd.DataFrame({
@@ -383,9 +429,70 @@ def main():
 
     df.to_csv(outcsv, index=False, quoting=csv.QUOTE_NONNUMERIC)
 
+    # Find equivalent coordinates to write dependencies
+    bds_eqs = find_deps(bds, eq)
+    ang_eqs = find_deps(angles, eq)
+    stiff_eqs = find_deps(stiff, eq)
+    imp_eqs = find_deps(impdiheds, eq)
+    flex_eqs = find_deps(flex, eq)
+
+    # Renumber each set of coordinate to follow global numbering
+    # bonds are first so no need to renumber, just add one to compensate
+    # python starting from zero
+    bds_eqs += 1
+    ang_eqs += 1 + (df[df["Type"] == "Bonds"]["End"]).values
+    stiff_eqs += 1 + (df[df["Type"] == "Angles"]["End"]).values
+    imp_eqs += 1 + (df[df["Type"] == "Stiff_dihedrals"]["End"]).values
+    flex_eqs += 1 + (df[df["Type"] == "Impropers"]["End"]).values
+
+    # Merge dependencies
+    arrs = [
+        bds_eqs,
+        ang_eqs,
+        stiff_eqs,
+        imp_eqs,
+        flex_eqs
+    ]
+
+    for arr in arrs:
+
+        if arr.shape[0] > 1:
+            try:
+                deps = np.r_[ deps, arr ]
+            except:
+                deps = arr
+
+    # Here I need to filter out redundancies
+    # In essence I check that for each pair of dependent coordinate
+    # none of the two has already appeared as either key or value in an
+    # earlier pair of dependent coordinates
+    deps_dict = {}
+    for dep in deps:
+        done = False
+        for k, v in deps_dict.items():
+            if (dep[1] in v or dep[0] in v) or (dep[0] == k or dep[1] == k):
+                deps_dict[k].extend(dep)
+                done = True
+
+        if not done:
+            deps_dict[dep[0]] = [ dep[1] ]
+
+    # Remove self-equivalence
+    for k, v in deps_dict.items():
+        v = np.asarray(v, dtype=int)
+        v = v[v != k]
+        deps_dict[k] = np.sort(np.unique(v))
+
+    # Write dependencies in Joyce format
+    with open(outdeps, "w") as f:
+        f.write("$dependence 1.2\n")
+        for k, v in deps_dict.items():
+            for vv in v:
+                f.write("%5d = 1.d0*%-5d\n" % (vv, k))
+        f.write("$end")
+
     return
 
 
 if __name__ == '__main__':
     main()
-    pass

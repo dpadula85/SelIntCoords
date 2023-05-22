@@ -483,15 +483,17 @@ def list_intcoords(coordfile):
     eq_hs = get_equivalent_hydrogens(u, G)
 
     # Join the two equivalences
+    # I also keep self equivalence because this makes it easier to
+    # code the identification of equivalent internal coordinates
     eq = {}
     for k, v in sorted(eq_ats.items()):
         try:
-            all_eqs = np.r_[ v, eq_hs[k] ]
+            all_eqs = np.r_[ k, v, eq_hs[k] ]
             for h in v:
                 all_eqs = np.r_[ all_eqs, eq_hs[h] ]
             eq[k] = np.sort(all_eqs)
         except:
-            eq[k] = v
+            eq[k] = np.sort(np.r_[ k, v ])
 
     # Figure out how to use equivalence to reduce internal coordinates and to
     # set up dependencies

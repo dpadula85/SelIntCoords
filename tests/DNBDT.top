@@ -1,0 +1,75 @@
+;
+; Daniele Padula, daniele.padula@unisi.it
+; DNBDT topology.
+; OPLS LJ terms
+;
+ [ defaults ]
+; nbfunc   comb-rule   gen-pairs  fudgeLJ  fudgeQQ
+     1       3          no       1.0     0.0
+ 
+[ atomtypes ]
+  Cp     12.0110   0.000   A    3.55000e-01  2.92880e-01  ; OPLS_145
+  Hp      1.0079   0.000   A    2.42000e-01  1.25520e-01  ; OPLS_146
+  STh    32.0600   0.000   A    3.55000e-01  1.04600e+00  ; OPLS_633
+
+;
+; Daniele Padula, daniele.padula@unisi.it
+; DNBDT include topology.
+; Parameterised at B3LYP-D3/6-31G* (PCM, eps=4.0) level
+;
+[ moleculetype ]
+; Name               nrexcl
+BDT                   3
+ 
+[ atoms ]
+;   nr       type  resnr residue  atom   cgnr     charge       mass
+     1       STh     1    BDT    STh      1    -0.120774    32.0600
+     2       Cp      1    BDT    Cp       2    -0.263883    12.0110
+     3       Cp      1    BDT    Cp       3     0.044564    12.0110
+     4       Cp      1    BDT    Cp       4     0.060426    12.0110
+     5       Cp      1    BDT    Cp       5    -0.326967    12.0110
+     6       Cp      1    BDT    Cp       6     0.265357    12.0110
+     7       Cp      1    BDT    Cp       7    -0.274010    12.0110
+     8       Cp      1    BDT    Cp       8    -0.109780    12.0110
+     9       Cp      1    BDT    Cp       9    -0.121668    12.0110
+    10       Cp      1    BDT    Cp      10    -0.175059    12.0110
+    11       Cp      1    BDT    Cp      11     0.049854    12.0110
+    12       Cp      1    BDT    Cp      12     0.019023    12.0110
+    13       Cp      1    BDT    Cp      13     0.089286    12.0110
+    14       Cp      1    BDT    Cp      14    -0.253465    12.0110
+    15       Hp      1    BDT    Hp      15     0.208021     1.0080
+    16       Hp      1    BDT    Hp      16     0.144674     1.0080
+    17       Hp      1    BDT    Hp      17     0.158278     1.0080
+    18       Hp      1    BDT    Hp      18     0.129897     1.0080
+    19       Hp      1    BDT    Hp      19     0.130222     1.0080
+    20       Hp      1    BDT    Hp      20     0.123557     1.0080
+    21       Hp      1    BDT    Hp      21     0.222445     1.0080
+    22       STh     1    BDT    STh     22    -0.120774    32.0600
+    23       Cp      1    BDT    Cp      23    -0.263883    12.0110
+    24       Cp      1    BDT    Cp      24     0.044564    12.0110
+    25       Cp      1    BDT    Cp      25     0.060426    12.0110
+    26       Cp      1    BDT    Cp      26    -0.326967    12.0110
+    27       Cp      1    BDT    Cp      27     0.265357    12.0110
+    28       Cp      1    BDT    Cp      28    -0.274010    12.0110
+    29       Cp      1    BDT    Cp      29    -0.109780    12.0110
+    30       Cp      1    BDT    Cp      30    -0.121668    12.0110
+    31       Cp      1    BDT    Cp      31    -0.175059    12.0110
+    32       Cp      1    BDT    Cp      32     0.049854    12.0110
+    33       Cp      1    BDT    Cp      33     0.019023    12.0110
+    34       Cp      1    BDT    Cp      34     0.089286    12.0110
+    35       Cp      1    BDT    Cp      35    -0.253465    12.0110
+    36       Hp      1    BDT    Hp      36     0.208021     1.0080
+    37       Hp      1    BDT    Hp      37     0.144674     1.0080
+    38       Hp      1    BDT    Hp      38     0.158278     1.0080
+    39       Hp      1    BDT    Hp      39     0.129897     1.0080
+    40       Hp      1    BDT    Hp      40     0.130222     1.0080
+    41       Hp      1    BDT    Hp      41     0.123557     1.0080
+    42       Hp      1    BDT    Hp      42     0.222445     1.0080
+ 
+[ system ]
+; Name
+DNBDT
+ 
+[ molecules ]
+; Compound        #mols
+BDT                 1

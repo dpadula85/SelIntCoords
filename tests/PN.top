@@ -1,0 +1,68 @@
+;
+; Daniele Padula, daniele.padula@unisi.it
+; Pentacene topology.
+; OPLS LJ terms.
+;
+ [ defaults ]
+; nbfunc   comb-rule   gen-pairs  fudgeLJ  fudgeQQ
+     1       3          no       1.0     0.0
+ 
+[ atomtypes ]
+  Cp     12.0110   0.000   A    3.55000e-01  2.92880e-01  ; OPLS_145
+  Hp      1.0079   0.000   A    2.42000e-01  1.25520e-01  ; OPLS_146
+
+;
+; Daniele Padula, daniele.padula@unisi.it
+; Pentacene include topology.
+; Parameterised at B3LYP/6-31G* (PCM, eps=4.0) level
+;
+[ moleculetype ]
+; Name               nrexcl
+PNC                   3
+ 
+[ atoms ]
+;   nr       type  resnr residue  atom   cgnr     charge       mass
+     1       Cp      1    PNC    Cp       1   -0.270602  12.0110
+     2       Cp      1    PNC    Cp       2    0.132810  12.0110
+     3       Cp      1    PNC    Cp       3    0.132810  12.0110
+     4       Cp      1    PNC    Cp       4   -0.270602  12.0110
+     5       Cp      1    PNC    Cp       5    0.132810  12.0110
+     6       Cp      1    PNC    Cp       6    0.132810  12.0110
+     7       Cp      1    PNC    Cp       7   -0.342902  12.0110
+     8       Cp      1    PNC    Cp       8    0.182474  12.0110
+     9       Cp      1    PNC    Cp       9    0.182474  12.0110
+    10       Cp      1    PNC    Cp      10   -0.342902  12.0110
+    11       Cp      1    PNC    Cp      11   -0.244631  12.0110
+    12       Cp      1    PNC    Cp      12   -0.108460  12.0110
+    13       Cp      1    PNC    Cp      13   -0.108460  12.0110
+    14       Cp      1    PNC    Cp      14   -0.244631  12.0110
+    15       Cp      1    PNC    Cp      15   -0.342902  12.0110
+    16       Cp      1    PNC    Cp      16    0.182474  12.0110
+    17       Cp      1    PNC    Cp      17    0.182474  12.0110
+    18       Cp      1    PNC    Cp      18   -0.342902  12.0110
+    19       Cp      1    PNC    Cp      19   -0.244631  12.0110
+    20       Cp      1    PNC    Cp      20   -0.108460  12.0110
+    21       Cp      1    PNC    Cp      21   -0.108460  12.0110
+    22       Cp      1    PNC    Cp      22   -0.244631  12.0110
+    23       Hp      1    PNC    Hp      23    0.153142   1.0080
+    24       Hp      1    PNC    Hp      24    0.153142   1.0080
+    25       Hp      1    PNC    Hp      25    0.166273   1.0080
+    26       Hp      1    PNC    Hp      26    0.166273   1.0080
+    27       Hp      1    PNC    Hp      27    0.145759   1.0080
+    28       Hp      1    PNC    Hp      28    0.127407   1.0080
+    29       Hp      1    PNC    Hp      29    0.127407   1.0080
+    30       Hp      1    PNC    Hp      30    0.145759   1.0080
+    31       Hp      1    PNC    Hp      31    0.166273   1.0080
+    32       Hp      1    PNC    Hp      32    0.166273   1.0080
+    33       Hp      1    PNC    Hp      33    0.145759   1.0080
+    34       Hp      1    PNC    Hp      34    0.127407   1.0080
+    35       Hp      1    PNC    Hp      35    0.127407   1.0080
+    36       Hp      1    PNC    Hp      36    0.145759   1.0080
+ 
+[ system ]
+; Name
+Pentacene
+ 
+[ molecules ]
+; Compound        #mols
+PNC                 1
