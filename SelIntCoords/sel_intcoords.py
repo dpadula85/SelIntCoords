@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import sys
+import psi4
 import itertools
 import numpy as np
 import pandas as pd
@@ -11,6 +12,8 @@ from pyscf.symm.geom import detect_symm, symm_identical_atoms
 
 import warnings
 warnings.filterwarnings("ignore")
+
+au2ang = 0.5291771
 
 
 def flatten(lst):
@@ -410,8 +413,24 @@ def get_equivalent_atoms(u):
         Dictionary of equivalent atoms.
     '''
 
-    atoms = np.asarray(list(zip(u.atoms.types, u.atoms.positions)))
-    point_group, coq, axes = detect_symm(atoms)
+    # Symmetrise molecule to detect point group
+    m = psi4.core.Molecule.from_arrays(
+            elem=u.atoms.types,
+            geom=u.atoms.positions,
+            molecular_charge=0,
+            molecular_multiplicity=1
+        )
+    m.symmetrize(0.01)
+    m.update_geometry()
+
+    coords, _, _, _, _ = m.to_arrays()
+    pg = m.find_highest_point_group()
+    point_group = pg.full_name()
+
+    atoms = list(zip(u.atoms.types, coords * au2ang ))
+
+    # Use symmetry to detect equivalence between atoms
+    # point_group, coq, axes = detect_symm(atoms)
     eqs = symm_identical_atoms(point_group, atoms)
 
     eq_ats = {}
