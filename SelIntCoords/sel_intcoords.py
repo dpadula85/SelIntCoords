@@ -424,13 +424,13 @@ def get_equivalent_atoms(u):
     m.update_geometry()
 
     coords, _, _, _, _ = m.to_arrays()
-    pg = m.find_highest_point_group()
-    point_group = pg.full_name()
+    # pg = m.find_highest_point_group()
+    # point_group = pg.full_name()
 
     atoms = list(zip(u.atoms.types, coords * au2ang ))
 
     # Use symmetry to detect equivalence between atoms
-    # point_group, coq, axes = detect_symm(atoms)
+    point_group, coq, axes = detect_symm(atoms)
     eqs = symm_identical_atoms(point_group, atoms)
 
     eq_ats = {}
