@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import setuptools
-from numpy.distutils.core import Extension, setup
+from setuptools import Extension, setup
 
 setup(
     name="SelIntCoords",

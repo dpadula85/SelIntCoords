@@ -1,14 +1,22 @@
 #!/usr/bin/env python
 
 import sys
-import psi4
 import itertools
 import numpy as np
 import pandas as pd
 import networkx as nx
 import MDAnalysis as mda
 from MDAnalysis.lib.util import unique_rows
-from pyscf.symm.geom import detect_symm, symm_identical_atoms
+
+try:
+    import psi4
+    from pyscf.symm.geom import detect_symm, symm_identical_atoms
+except:
+    import psi4
+    from pyscf.symm.geom import detect_symm, symm_identical_atoms
+finally:
+    import psi4
+    from pyscf.symm.geom import detect_symm, symm_identical_atoms
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -284,7 +292,7 @@ def get_rings(G, bds):
             cleanidxs = np.where((ringbds != delats).all(axis=1))[0]
             cleanringbds = ringbds[cleanidxs]
             ringats = np.unique(cleanringbds.reshape(-1))
-        except AttributeError:
+        except:
             cleanringbds = ringbds.copy()
             ringats = np.unique(cleanringbds.reshape(-1))
 
