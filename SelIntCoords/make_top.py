@@ -10,6 +10,11 @@ from itertools import product
 from .top import *
 from .blocks import *
 from .sel_intcoords import list_intcoords, flip_bigger, flatten
+from .dihed_deps import (
+        get_ring_stiff_dihedral_equivalencies,
+        integrate_ring_dihedral_equivalencies,
+        find_stiff_dihedral_deps
+    )
 
 # Default bond parameters
 bparms = {
@@ -358,7 +363,7 @@ def find_deps(coords, eqs):
     return equivs
 
 
-def main():
+def old_main():
 
     Opts = options()
 
@@ -466,6 +471,165 @@ def main():
     # In essence I check that for each pair of dependent coordinate
     # none of the two has already appeared as either key or value in an
     # earlier pair of dependent coordinates
+    deps_dict = {}
+    for dep in deps:
+        done = False
+        for k, v in deps_dict.items():
+            if (dep[1] in v or dep[0] in v) or (dep[0] == k or dep[1] == k):
+                deps_dict[k].extend(dep)
+                done = True
+
+        if not done:
+            deps_dict[dep[0]] = [ dep[1] ]
+
+    # Remove self-equivalence
+    for k, v in deps_dict.items():
+        v = np.asarray(v, dtype=int)
+        v = v[v != k]
+        deps_dict[k] = np.sort(np.unique(v))
+
+    # Write dependencies in Joyce format
+    with open(outdeps, "w") as f:
+        f.write("$dependence 1.2\n")
+        for k, v in deps_dict.items():
+            for vv in v:
+                f.write("%5d = %5d*1.d0 ;\n" % (vv, k))
+        f.write("$end")
+
+    return
+
+
+# Modified main() function to deal also with dihedral dependencies
+
+def main():
+    Opts = options()
+
+    # Read in topology
+    topfile = Opts['TopFile']
+
+    # Get internal coordinates and other information from geometry
+    data = list_intcoords(Opts['MolFile'])
+    bds, angles, stiff, impdiheds, flex, LJs, excls, rings, eq = data
+
+    # NEW: Get ring-based stiff dihedral equivalencies
+    enhanced_eq, ring_dih_info = integrate_ring_dihedral_equivalencies(eq, stiff, rings)
+
+    # Get specific stiff dihedral dependencies for ring dihedrals
+    stiff_ring_deps = find_stiff_dihedral_deps(stiff, rings)
+
+    # # Print information about ring dihedral groupings (optional, for debugging)
+    # if len(ring_dih_info['ring_groups']) > 0:
+    #     print("Ring dihedral groupings found:")
+    #     for ring_idx, dih_indices in ring_dih_info['ring_groups'].items():
+    #         print(f"  Ring {ring_idx}: {len(dih_indices)} equivalent stiff dihedrals")
+
+    # Create Topology (unchanged)
+    topobj = add_terms(
+            topfile,
+            bds,
+            angles,
+            stiff,
+            impdiheds,
+            flex,
+            LJs,
+            excls,
+            mixing=Opts["MixingRule"]
+        )
+
+    # Create output file names (unchanged)
+    if not Opts['OutFile']:
+        outfile = '.'.join(Opts['TopFile'].split(".")[:-1]) + '.new.top'
+        outcsv = '.'.join(Opts['TopFile'].split(".")[:-1]) + '.csv'
+        outdeps = '.'.join(Opts['TopFile'].split(".")[:-1]) + '_deps.dat'
+    else:
+        outfile = Opts['OutFile']
+        outcsv = '.'.join(Opts['OutFile'].split(".")[:-1]) + '.csv'
+        outdeps = '.'.join(Opts['OutFile'].split(".")[:-1]) + '_deps.dat'
+
+    # Write topology (unchanged)
+    topobj.write(outfile)
+
+    # Create summary dataframe (unchanged)
+    df = pd.DataFrame({
+            'Type' : [
+                'Bonds',
+                'Angles',
+                'Stiff_dihedrals',
+                'Impropers',
+                'Flex_dihedrals',
+                'LJ 1,4',
+                'LJ 1,5',
+                'LJ 1,6',
+                'LJ 1,7',
+                'LJ 1,n',
+            ],
+
+            'Number' : [
+                bds.shape[0],
+                angles.shape[0],
+                stiff.shape[0],
+                impdiheds.shape[0],
+                flex.shape[0],
+                LJs['1,4'].shape[0],
+                LJs['1,5'].shape[0],
+                LJs['1,6'].shape[0],
+                LJs['1,7'].shape[0],
+                LJs['other'].shape[0],
+            ]
+        })
+
+    df['End'] = df['Number'].cumsum()
+    df['Start'] = [ 1 ] + (df['End'] + 1).tolist()[:-1]
+    df = df[['Type', 'Number', 'Start', 'End']]
+
+    df.to_csv(outcsv, index=False, quoting=csv.QUOTE_NONNUMERIC)
+
+    # Find equivalent coordinates using enhanced equivalencies
+    # For atoms, use the original eq dictionary
+    bds_eqs = find_deps(bds, eq)  # Original function for bonds
+    ang_eqs = find_deps(angles, eq)  # Original function for angles
+
+    # For stiff dihedrals, combine the original symmetry-based equivalencies
+    # with the new ring-based equivalencies
+    stiff_eqs = find_deps(stiff, eq)  # Original symmetry-based equivalencies
+
+    # Add ring-based stiff dihedral dependencies
+    if stiff_ring_deps.size > 0:
+        # Convert stiff_ring_deps to the same format as other equivalencies
+        # (add 1 to convert from 0-based to 1-based indexing if needed)
+        if stiff_eqs.size > 0:
+            stiff_eqs = np.vstack([stiff_eqs, stiff_ring_deps + 1])
+        else:
+            stiff_eqs = stiff_ring_deps + 1
+
+    imp_eqs = find_deps(impdiheds, eq)  # Original function for impropers
+    flex_eqs = find_deps(flex, eq)      # Original function for flexible dihedrals
+
+    # Rest of the function remains the same...
+    # Renumber each set of coordinate to follow global numbering
+    bds_eqs += 1
+    ang_eqs += 1 + (df[df["Type"] == "Bonds"]["End"]).values
+    stiff_eqs += 1 + (df[df["Type"] == "Angles"]["End"]).values
+    imp_eqs += 1 + (df[df["Type"] == "Stiff_dihedrals"]["End"]).values
+    flex_eqs += 1 + (df[df["Type"] == "Impropers"]["End"]).values
+
+    # Merge dependencies
+    arrs = [
+        bds_eqs,
+        ang_eqs,
+        stiff_eqs,
+        imp_eqs,
+        flex_eqs
+    ]
+
+    for arr in arrs:
+        if arr.shape[0] > 1:
+            try:
+                deps = np.r_[ deps, arr ]
+            except:
+                deps = arr
+
+    # Filter out redundancies (unchanged)
     deps_dict = {}
     for dep in deps:
         done = False

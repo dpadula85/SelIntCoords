@@ -957,6 +957,7 @@ class SystemToGroTop(object):
         self.system   = system
         self.outfile = outfile
         self.multiple_output = multiple_output
+        self.internal_coord_counter = 1
         self.assemble_topology()
 
         self.logger.debug("<< leaving SystemToGroTop")
@@ -1273,6 +1274,10 @@ class SystemToGroTop(object):
             kb, b0 = bond.gromacs["param"]["kb"], bond.gromacs["param"]["b0"]
             line = self.formats['bonds_ext'].format(bond.atom1.number, bond.atom2.number, fu, b0, kb)
 
+            # Add global counter as comment
+            line = line.rstrip('\n') + f'  ; {self.internal_coord_counter}\n'
+            self.internal_coord_counter += 1
+
             result.append(line)
 
         result.insert(0,'; {0:5d} bonds\n'.format(len(result)))
@@ -1291,6 +1296,10 @@ class SystemToGroTop(object):
 
             ktetha, tetha0 = ang.gromacs["param"]["ktetha"] , ang.gromacs["param"]["tetha0"]
             line = self.formats['angles_ext'].format(ang.atom1.number, ang.atom2.number, ang.atom3.number, fu, tetha0, ktetha)
+
+            # Add global counter as comment
+            line = line.rstrip('\n') + f'  ; {self.internal_coord_counter}\n'
+            self.internal_coord_counter += 1
 
             result.append(line)
 
@@ -1336,6 +1345,10 @@ class SystemToGroTop(object):
             if not dih.gromacs['param']:
                 line = self.formats['dihedrals'].format(
                     dih.atom1.number, dih.atom2.number, dih.atom3.number, dih.atom4.number, fu)
+
+                # Add global counter as comment
+                line = line.rstrip('\n') + f'  ; {self.internal_coord_counter}\n'
+                self.internal_coord_counter += 1
                 result.append(line)
 
             for dpar in dih.gromacs['param']:
@@ -1344,7 +1357,14 @@ class SystemToGroTop(object):
                 delta= dpar['delta']
 
                 line = self.formats['dihedrals_ext'].format(dih.atom1.number, dih.atom2.number, dih.atom3.number, dih.atom4.number, fu, delta, kchi, n)
-                if dih.comment: line = dih.comment + line
+                # if dih.comment: line = dih.comment + line
+                # Handle existing comments and add global counter
+                if dih.comment:
+                    line = dih.comment + line.rstrip('\n') + f'  ; {self.internal_coord_counter}\n'
+                else:
+                    line = line.rstrip('\n') + f'  ; {self.internal_coord_counter}\n'
+
+                self.internal_coord_counter += 1
                 result.append(line)
 
         result.insert(0,'; {0:5d} dihedrals\n'.format(len(result)))
@@ -1358,6 +1378,10 @@ class SystemToGroTop(object):
             if not imp.gromacs['param']:
                 line = self.formats['impropers'].format(
                     imp.atom1.number, imp.atom2.number, imp.atom3.number, imp.atom4.number, fu)
+
+                # Add global counter as comment
+                line = line.rstrip('\n') + f'  ; {self.internal_coord_counter}\n'
+                self.internal_coord_counter += 1
                 result.append(line)
 
             for ipar in imp.gromacs['param']:
@@ -1370,7 +1394,14 @@ class SystemToGroTop(object):
                     n = ipar['n']
                     line = self.formats['impropers_4'].format(imp.atom1.number, imp.atom2.number, imp.atom3.number, imp.atom4.number, fu, psi0, kpsi, n)
 
-                if imp.comment: line = imp.comment + line
+                # if imp.comment: line = imp.comment + line
+                # Handle existing comments and add global counter
+                if imp.comment:
+                    line = imp.comment + line.rstrip('\n') + f'  ; {self.internal_coord_counter}\n'
+                else:
+                    line = line.rstrip('\n') + f'  ; {self.internal_coord_counter}\n'
+
+                self.internal_coord_counter += 1
                 result.append(line)
 
         result.insert(0,'; {0:5d} impropers\n'.format(len(result)))
