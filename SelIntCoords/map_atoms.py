@@ -187,8 +187,6 @@ class AtomMapper:
             self._graph_ref, self._graph_tgt,
             node_match=lambda a, b: a["element"] == b["element"],
         )
-        if not matcher.is_isomorphic():
-            raise RuntimeError("Reference and target molecular graphs are not isomorphic.")
 
         ref_positions = self.ref_universe.atoms.positions.copy()
         tgt_positions = self.tgt_universe.atoms.positions
@@ -208,6 +206,9 @@ class AtomMapper:
                     "...%d isomorphisms tested so far (best RMSD so far: %.6f A)",
                     n_isomorphisms, best_rmsd,
                 )
+
+        if best_mapping is None:
+            raise RuntimeError("Reference and target molecular graphs are not isomorphic.")
 
         log.info("Tested %d isomorphism(s); best RMSD = %.6f A", n_isomorphisms, best_rmsd)
 
