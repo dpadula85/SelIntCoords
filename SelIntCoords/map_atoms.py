@@ -14,31 +14,34 @@ The resulting map can be written to file and fed to `renumber_top`
 it follows the reference numbering.
 '''
 
-import argparse as arg
-import logging
-from pathlib import Path
+from __future__ import annotations
 
+import logging
 import numpy as np
 import networkx as nx
+import argparse as arg
+from pathlib import Path
 import MDAnalysis as mda
+from typing import Sequence
+from dataclasses import dataclass
 from networkx.algorithms.isomorphism import GraphMatcher
 
 log = logging.getLogger("map_atoms")
 
 
-class AtomMapping(object):
-    '''Class to hold the result of mapping reference atoms onto target atoms.
+@dataclass(frozen=True)
+class AtomMapping:
+    '''Result of mapping reference atoms onto target atoms.
 
     :attr:`mapping` is a list such that ``mapping[i]`` is the 0-based
     index of the target atom corresponding to reference atom ``i``.
     '''
 
-    def __init__(self, mapping, rmsd, n_isomorphisms):
-        self.mapping = mapping
-        self.rmsd = rmsd
-        self.n_isomorphisms = n_isomorphisms
+    mapping: list[int]
+    rmsd: float
+    n_isomorphisms: int
 
-    def as_dict(self, one_based=False):
+    def as_dict(self, one_based: bool = False) -> dict[int, int]:
         '''Return the mapping as a dictionary.
 
         Parameters
@@ -56,7 +59,7 @@ class AtomMapping(object):
         offset = 1 if one_based else 0
         return {i + offset: j + offset for i, j in enumerate(self.mapping)}
 
-    def as_array(self, one_based=False):
+    def as_array(self, one_based: bool = False) -> np.ndarray:
         '''Return the mapping as an array.
 
         Parameters
@@ -76,7 +79,7 @@ class AtomMapping(object):
         tgt_idx = np.asarray(self.mapping) + offset
         return np.column_stack([ref_idx, tgt_idx])
 
-    def write(self, filename, one_based=True):
+    def write(self, filename: str | Path, one_based: bool = True) -> None:
         '''Write the mapping to a plain-text two-column file.
 
         Parameters
@@ -96,12 +99,12 @@ class AtomMapping(object):
         )
 
 
-class AtomMapper(object):
+class AtomMapper:
     '''Class to compute a graph-isomorphism-based atom mapping between two
     XYZ structures.
     '''
 
-    def __init__(self, reference, target):
+    def __init__(self, reference: str | Path, target: str | Path):
         '''
         Parameters
         ----------
@@ -124,23 +127,29 @@ class AtomMapper(object):
                 % (self.ref_universe.atoms.n_atoms, self.tgt_universe.atoms.n_atoms)
             )
 
-        self._result = None
+        # Bond graphs only depend on connectivity/elements, which are fixed
+        # once the Universes are loaded, so build them once here rather than
+        # on every map() call.
+        self._graph_ref: nx.Graph = self._build_graph(self.ref_universe)
+        self._graph_tgt: nx.Graph = self._build_graph(self.tgt_universe)
+
+        self._result: AtomMapping | None = None
 
     @property
-    def result(self):
-        '''The most recently computed :class:`AtomMapping`. Call :meth:`map` first.'''
+    def result(self) -> AtomMapping:
+        '''The most recently computed :class:`AtomMapping`. Call :meth:`run` first.'''
 
         if self._result is None:
             raise RuntimeError("No mapping computed yet; call map() first.")
         return self._result
 
     @staticmethod
-    def _element(atom):
+    def _element(atom) -> str:
         element = getattr(atom, "element", "") or atom.name[0]
         return element.strip()
 
     @classmethod
-    def _build_graph(cls, universe):
+    def _build_graph(cls, universe: mda.Universe) -> nx.Graph:
         graph = nx.Graph()
         for i, atom in enumerate(universe.atoms):
             graph.add_node(i, element=cls._element(atom))
@@ -148,7 +157,7 @@ class AtomMapper(object):
         return graph
 
     @staticmethod
-    def _kabsch_rmsd(p, q):
+    def _kabsch_rmsd(p: np.ndarray, q: np.ndarray) -> float:
         '''RMSD between P and Q after optimal rigid-body superposition.'''
 
         p_c = p - p.mean(axis=0)
@@ -158,7 +167,7 @@ class AtomMapper(object):
         rotation = v @ np.diag([1.0, 1.0, sign]) @ wt
         return float(np.sqrt(np.mean(np.sum((p_c @ rotation - q_c) ** 2, axis=1))))
 
-    def map(self, log_every=10000):
+    def run(self, log_every: int = 10000) -> AtomMapping:
         '''Find the isomorphism that minimises RMSD; cache and return the result.
 
         Parameters
@@ -174,11 +183,9 @@ class AtomMapper(object):
         result: AtomMapping.
         '''
 
-        graph_ref = self._build_graph(self.ref_universe)
-        graph_tgt = self._build_graph(self.tgt_universe)
-
         matcher = GraphMatcher(
-            graph_ref, graph_tgt, node_match=lambda a, b: a["element"] == b["element"]
+            self._graph_ref, self._graph_tgt,
+            node_match=lambda a, b: a["element"] == b["element"],
         )
         if not matcher.is_isomorphic():
             raise RuntimeError("Reference and target molecular graphs are not isomorphic.")
@@ -187,7 +194,7 @@ class AtomMapper(object):
         tgt_positions = self.tgt_universe.atoms.positions
 
         best_rmsd = np.inf
-        best_mapping = None
+        best_mapping: list[int] | None = None
         n_isomorphisms = 0
 
         for iso in matcher.isomorphisms_iter():
@@ -207,19 +214,19 @@ class AtomMapper(object):
         self._result = AtomMapping(best_mapping, best_rmsd, n_isomorphisms)
         return self._result
 
-    def reordered_atomgroup(self, mapping=None):
+    def reordered_atomgroup(self, mapping: Sequence[int] | None = None) -> mda.AtomGroup:
         '''Return the target AtomGroup reordered to match the reference atom order.'''
 
         mapping = mapping if mapping is not None else self.result.mapping
         return self.tgt_universe.atoms[mapping]
 
-    def write_reordered(self, filename, mapping=None):
+    def write_reordered(self, filename: str | Path, mapping: Sequence[int] | None = None) -> None:
         '''Write the reordered target structure (format inferred from extension).'''
 
         self.reordered_atomgroup(mapping).write(str(filename))
 
 
-def options():
+def options() -> dict:
     '''Defines the options of the script.'''
 
     parser = arg.ArgumentParser(
@@ -259,7 +266,7 @@ def options():
     return vars(parser.parse_args())
 
 
-def main():
+def main() -> None:
     Opts = options()
 
     logging.basicConfig(
@@ -268,7 +275,7 @@ def main():
     )
 
     mapper = AtomMapper(Opts["RefFile"], Opts["TgtFile"])
-    result = mapper.map()
+    result = mapper.run()
     result.write(Opts["MapFile"])
     log.info("Map written to %s", Opts["MapFile"])
 

@@ -3,8 +3,7 @@
 A Python package to automatically select and group internal coordinates
 (bonds, angles, dihedrals) from a molecular geometry, and to produce a
 GROMACS topology ready to be used with the
-[Joyce](https://pubs.acs.org/doi/10.1021/acs.jctc.5c00010) program
-[(docs)](https://joyce-documentation.gitlab.io/) to parameterise
+[Joyce](https://www.dsf.unica.it/~fabio/Joyce.php) program to parameterise
 a force field. It also includes tools to map and renumber atoms so that a
 force-field topology follows an arbitrary external numbering, e.g. an
 experimental crystal structure.
@@ -213,7 +212,7 @@ topobj.write("output.top")
 
 # 2. Map atoms between two geometries
 mapper = AtomMapper("crystal.xyz", "geometry.xyz")
-result = mapper.map()
+result = mapper.run()
 result.as_dict(one_based=True)     # {ref_atom: tgt_atom, ...}
 result.as_array(one_based=True)    # (N, 2) numpy array
 result.write("map.txt")
