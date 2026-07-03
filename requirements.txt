@@ -1,7 +1,6 @@
-pyscf==2.2.1
-numpy==1.24.3
-pandas==2.0.1
-networkx==3.1
-MDAnalysis==2.4.3
-setuptools==67.7.2
-psi4 @ git+https://github.com/psi4/psi4.git@master
+MDAnalysis==2.7.0
+networkx==3.2.1
+numpy==1.26.4
+pandas==2.2.1
+pyscf==2.5.0
+setuptools==69.2.0
