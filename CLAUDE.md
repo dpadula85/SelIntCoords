@@ -82,17 +82,21 @@ a `Fragment`.
   a diethyl-ether test molecule: identical `sp2` for `alkyl=True` before
   and after, oxygen present in `sp2` before the fix and correctly absent
   under `ether=True` after it).
-- `make_top.py` still carries a complete `old_main()` (~130 lines),
-  fully superseded by `main()` (which adds ring-dihedral dependency
-  handling) — safe to delete, not called from anywhere including the
-  `make_top` console-script entry point (which points at `main`).
-- `sel_intcoords.py`'s top-of-file `try: import psi4, pyscf... except:
-  import (same) ... finally: import (same)` (lines 11-19) provides no
-  actual error handling — if the import fails in `try`, it fails
-  identically in `except`, and `finally` then re-raises unconditionally
-  anyway. Either drop the try/except/finally (it's equivalent to a plain
-  import today) or convert to the `HAS_X`-guarded pattern used elsewhere
-  in Daniele's newer code if psi4 is meant to be optional.
+- **Fixed 2026-08-06:** `make_top.py` carried a complete `old_main()`
+  (~130 lines), fully superseded by `main()` (which adds ring-dihedral
+  dependency handling) — deleted; the `make_top` console-script entry
+  point already pointed at `main`, not `old_main`.
+- **Investigated, deliberately left as-is:** `sel_intcoords.py`'s
+  top-of-file `try: import psi4, pyscf... except: import (same) ...
+  finally: import (same)` (lines 11-19) looks like a no-op (if the
+  import fails in `try` it fails identically in `except`, and `finally`
+  re-raises unconditionally anyway) — a plain single import reproduced
+  identical behavior in repeated local testing (5 runs, same import
+  order as the real file, psi4 1.9.1). **But Daniele confirmed this
+  triple import is a deliberate workaround for a real psi4 quirk seen on
+  some of his other machines, not dead code** — the quirk didn't
+  reproduce in this environment, so don't "clean this up" again without
+  actually reproducing the failure it guards against.
 - **Fixed 2026-08-06:** `list_intcoords()`'s docstring `Returns` section
   omitted `eq` (the equivalence dict), which is in fact the 9th/last
   returned value — added.
