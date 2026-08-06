@@ -481,6 +481,8 @@ def list_intcoords(coordfile):
     rings: dict.
         Dictionary of rings, divided in core atoms, and core plus substituents
         (full).
+    eq: dict.
+        Dictionary of equivalent atoms (by symmetry and local connectivity).
     '''
 
     u = mda.Universe(coordfile, guess_bonds=True)
