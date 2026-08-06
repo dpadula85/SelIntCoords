@@ -52,12 +52,11 @@ def get_sp2(u, alkyl=True, ether=False):
     Parameters
     ----------
     u: object.
-        MDAnalysis Universe to be cropped.
+        MDAnalysis Universe to be analyzed.
     alkyl: bool.
         Whether side chains to crop are purely alkylic.
     ether: bool.
-        Whether side chains to crop have an oxygen atom connected to the
-
+        Whether side chains to crop have an oxygen atom connected.
 
     Returns
     -------
@@ -98,35 +97,20 @@ def get_sp2(u, alkyl=True, ether=False):
     if alkyl:
         allcheck = sp3
     elif ether:
+        oxy = np.where(u.atoms.types == "O")[0]
         allcheck = np.concatenate([sp3, oxy])
     else:
         allcheck = sp3
 
-    # Check all sp3 atoms
-    keep = []
-    delete = []
-    for satat in allcheck:
-
-        # check connectivity
-        iconn = conn[satat]
-
-        # filter H out from connected
-        iconnheavy = iconn[np.in1d(iconn, heavy)]
-
-        delete.append(satat)
-        delete.extend(iconn[~np.in1d(iconn, heavy)])
-
-    # Convert to int arrays
-    keep = np.asarray(keep).astype(int)
-    delete = np.asarray(delete).astype(int)
-
-    # Get non sp3 atoms
+    # Get non sp3 atoms, excluding chain-type atoms (sp3 carbons, and ether
+    # oxygens when ether=True) so they aren't misclassified as sp2. sp3
+    # atoms are already excluded by the unsat test itself (all 4 valences
+    # filled), so this is a no-op for alkyl/default mode; it only matters
+    # for ether mode, where oxygens (2 connections) would otherwise pass
+    # the unsat test and be misclassified as sp2.
     unsat = ~np.all(conn > -1, axis=1)
-
-    # Set which saturated atoms to keep or delete
-    unsat[keep] = True
-    unsat[delete] = False
     tokeep = np.where(unsat)[0]
+    tokeep = np.setdiff1d(tokeep, allcheck)
     sp2 = np.intersect1d(tokeep, heavy)
 
     return sp2, sp3
@@ -253,22 +237,22 @@ def myround(x, base=5):
 
 def get_rings(G, bds):
     '''
-    Function to get n-order paths in graph G, starting from node u.
+    Function to get rings in graph G.
 
     Parameters
     ----------
     G: NetworkX Graph object.
-        Graph for path search.
+        Graph for ring search.
     bds: np.ndarray.
         Array of bonds, in terms of indices of involved atoms.
 
     Returns
     -------
     rings: list of list.
-        List of rings, where each ring is a list ot atom indices constituting
+        List of rings, where each ring is a list of atom indices constituting
         the ring core.
     fullrings: list of list.
-        List of rings, where each ring is a list ot atom indices constituting
+        List of rings, where each ring is a list of atom indices constituting
         the ring core and its substituents.
     '''
 

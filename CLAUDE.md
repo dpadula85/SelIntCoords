@@ -65,15 +65,23 @@ a `Fragment`.
 
 ## Known gaps / TODOs
 
-- `sel_intcoords.py`'s `get_sp2(u, alkyl=True, ether=False)`: the
-  `ether=True` branch references an undefined name `oxy` (line ~101) —
-  latent `NameError` if ever called with `ether=True` (nothing in this
-  repo currently does; `list_intcoords()` always calls with defaults).
-  The `keep` list in the same function is built but never populated
-  (only `delete` is appended to) — the function still returns correct
-  results because the `unsat` mask already accounts for this, but the
-  dead `keep`-handling code (lines ~106-129) should be removed or
-  clarified rather than left looking load-bearing.
+- **Fixed 2026-08-06:** `sel_intcoords.py`'s `get_sp2(u, alkyl=True,
+  ether=False)` previously referenced an undefined name `oxy` in its
+  `ether=True` branch (latent `NameError`; unreachable in practice since
+  `list_intcoords()` always calls with defaults), and its `allcheck`
+  variable was computed but never actually wired into the sp2/sp3
+  classification in any branch (so `alkyl`/`ether` did nothing
+  functionally different — `alkyl` mode only "worked" because sp3 atoms
+  are separately excluded by the `unsat` test itself). Synced to
+  match `oligomer_builder`'s cleaner copy (removed the dead `keep`-list
+  code, replaced the crash with a safe branch), then fixed further: the
+  `unsat`-derived candidate set is now explicitly reduced by `allcheck`
+  (`np.setdiff1d`), so `ether=True` genuinely excludes ether oxygens
+  (any atom of type `"O"`, matching `chain_cropper`'s convention) from
+  `sp2`, while `alkyl`/default mode is provably unchanged (verified with
+  a diethyl-ether test molecule: identical `sp2` for `alkyl=True` before
+  and after, oxygen present in `sp2` before the fix and correctly absent
+  under `ether=True` after it).
 - `make_top.py` still carries a complete `old_main()` (~130 lines),
   fully superseded by `main()` (which adds ring-dihedral dependency
   handling) — safe to delete, not called from anywhere including the
