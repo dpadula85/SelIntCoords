@@ -85,9 +85,9 @@ a `Fragment`.
   anyway. Either drop the try/except/finally (it's equivalent to a plain
   import today) or convert to the `HAS_X`-guarded pattern used elsewhere
   in Daniele's newer code if psi4 is meant to be optional.
-- `list_intcoords()`'s docstring `Returns` section omits `eq` (the
-  equivalence dict), which is in fact the 9th/last returned value —
-  minor doc/code mismatch.
+- **Fixed 2026-08-06:** `list_intcoords()`'s docstring `Returns` section
+  omitted `eq` (the equivalence dict), which is in fact the 9th/last
+  returned value — added.
 
 ## Dependencies
 
