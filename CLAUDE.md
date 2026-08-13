@@ -82,6 +82,16 @@ a `Fragment`.
   a diethyl-ether test molecule: identical `sp2` for `alkyl=True` before
   and after, oxygen present in `sp2` before the fix and correctly absent
   under `ether=True` after it).
+- **Superseded 2026-08-13:** the fix above was still incomplete — the
+  function tested `if alkyl: ... elif ether: ...`, and `alkyl` defaults
+  `True`, so the `ether` branch stayed unreachable unless a caller also
+  passed `alkyl=False`, which `list_intcoords()` never did. `get_sp2` is
+  no longer defined here: `sel_intcoords.py` now imports it from
+  `chain_cropper.topology`, the single place this logic lives (also used
+  by `oligomer_builder.enhanced_breaker`, which imports the same symbol).
+  This package gained a runtime dependency on `chain-cropper`
+  (`setup.py`). `alkyl`-mode behaviour is unchanged; `ether=True`
+  callers now get correct results instead of the alkyl-mode ones.
 - **Fixed 2026-08-06:** `make_top.py` carried a complete `old_main()`
   (~130 lines), fully superseded by `main()` (which adds ring-dihedral
   dependency handling) — deleted; the `make_top` console-script entry

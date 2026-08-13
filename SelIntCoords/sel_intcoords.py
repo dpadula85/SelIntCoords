@@ -8,6 +8,14 @@ import networkx as nx
 import MDAnalysis as mda
 from MDAnalysis.lib.util import unique_rows
 
+# get_sp2 used to be defined here (and, separately, in
+# oligomer_builder.enhanced_breaker) as a byte-for-byte copy carrying the
+# same latent bug: `if alkyl: ... elif ether: ...` with `alkyl` defaulting
+# True meant the `ether` branch could never fire unless a caller also
+# passed `alkyl=False`, which nothing did. chain_cropper.topology now
+# carries the single, fixed implementation; both call sites import it.
+from chain_cropper.topology import get_sp2
+
 try:
     import psi4
     from pyscf.symm.geom import detect_symm, symm_identical_atoms
@@ -43,77 +51,6 @@ def flatten(lst):
                      else flatten(x) for x in lst), [] )
 
     return flattened
-
-
-def get_sp2(u, alkyl=True, ether=False):
-    '''
-    Function to get indices of sp2 and sp3 atoms.
-
-    Parameters
-    ----------
-    u: object.
-        MDAnalysis Universe to be analyzed.
-    alkyl: bool.
-        Whether side chains to crop are purely alkylic.
-    ether: bool.
-        Whether side chains to crop have an oxygen atom connected.
-
-    Returns
-    -------
-    sp2: np.ndarray.
-        Indices of sp2 atoms.
-    sp3: np.ndarray.
-        Indices of sp3 atoms.
-    '''
-
-    # Get bonds
-    try:
-        bds = u.bonds.to_indices()
-    except:
-        u.guess_bonds()
-        bds = u.bonds.to_indices()
-
-    # Get connectivity, use -1 as a placeholder for empty valence
-    conn = np.ones((len(u.atoms), 4)) * -1
-    for bond in bds:
-        at1, at2 = bond
-        for j in np.arange(conn[at1].shape[0]):
-            if conn[at1,j] == -1:
-                conn[at1,j] = at2
-                break
-
-        for j in np.arange(conn[at2].shape[0]):
-            if conn[at2,j] == -1:
-                conn[at2,j] = at1
-                break
-
-    # Get heavy atoms
-    heavy = np.where(u.atoms.types != "H")[0]
-
-    # Get sp3 atoms
-    sp3 = np.where(np.all(conn > -1, axis=1))[0]
-
-    # Alkyls or ether chain
-    if alkyl:
-        allcheck = sp3
-    elif ether:
-        oxy = np.where(u.atoms.types == "O")[0]
-        allcheck = np.concatenate([sp3, oxy])
-    else:
-        allcheck = sp3
-
-    # Get non sp3 atoms, excluding chain-type atoms (sp3 carbons, and ether
-    # oxygens when ether=True) so they aren't misclassified as sp2. sp3
-    # atoms are already excluded by the unsat test itself (all 4 valences
-    # filled), so this is a no-op for alkyl/default mode; it only matters
-    # for ether mode, where oxygens (2 connections) would otherwise pass
-    # the unsat test and be misclassified as sp2.
-    unsat = ~np.all(conn > -1, axis=1)
-    tokeep = np.where(unsat)[0]
-    tokeep = np.setdiff1d(tokeep, allcheck)
-    sp2 = np.intersect1d(tokeep, heavy)
-
-    return sp2, sp3
 
 
 def dihedral(A, B, C, D):
