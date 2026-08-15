@@ -13,6 +13,21 @@ setup(
     packages=setuptools.find_packages(),
     install_requires=[
         "chain-cropper",
+        # sel_intcoords.py/make_top.py import these directly; only
+        # chain-cropper's own transitive MDAnalysis/numpy happened to be
+        # covered before -- networkx and pandas were missing entirely.
+        "MDAnalysis",
+        "networkx",
+        "numpy",
+        "pandas",
+        # Point-group detection (make_top/sel_intcoords only -- see
+        # README.md's Requirements section).
+        "pyscf",
+        # NOT listed here: `psi4`, also required by make_top/sel_intcoords
+        # for point-group detection, is not distributed on PyPI at all --
+        # pip has no way to satisfy it (only conda-forge, `conda install
+        # -c conda-forge psi4`), so declaring it here would just make
+        # `pip install` fail outright rather than document a real gap.
     ],
     entry_points={
         'console_scripts' : [
