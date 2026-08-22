@@ -1,4 +1,16 @@
+<div align="center">
+
 # SelIntCoords
+
+**Select and group internal coordinates from a molecular geometry for QMD-FF parameterization**
+
+[![version](https://img.shields.io/badge/version-1.1-blue)](setup.py)
+[![python](https://img.shields.io/badge/python-3-blue)](setup.py)
+[![license](https://img.shields.io/badge/license-GPLv3-blue)](LICENSE)
+
+</div>
+
+---
 
 A Python package to automatically select and group internal coordinates
 (bonds, angles, dihedrals) from a molecular geometry, and to produce a
