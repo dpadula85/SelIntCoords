@@ -115,6 +115,12 @@ def _rewrite_and_collect(top_text, source_name='<string>'):
         deleted, tagged) rather than passed through. Byte-identical
         otherwise, except `[ defaults ]`'s global `fudgeQQ` field,
         forced to `0.0` whenever this text contains one.
+    pairs: list of (mol_name, i, j, fudgeQQ, qi, qj, v, w).
+        Every *kept* (non-duplicate) `[ pairs ]` line, 1-indexed and
+        molecule-local, in file order -- byproduct of the same parse,
+        added so `openmm_compat.load_top` can rebuild each pair's 1-4
+        interaction from the file's own text instead of trusting
+        `createSystem`'s auto-generated one (see that module).
     includes: list of str.
         `#include`d filenames, in file order.
 
@@ -125,8 +131,10 @@ def _rewrite_and_collect(top_text, source_name='<string>'):
     '''
 
     out = []
+    pairs = []
     includes = []
     section = None
+    mol_name = None
     expect_mol_name = False
     seen_pairs = set()
     has_defaults = False
@@ -172,6 +180,7 @@ def _rewrite_and_collect(top_text, source_name='<string>'):
             continue
 
         if section == 'moleculetype' and expect_mol_name:
+            mol_name = stripped.split()[0]
             expect_mol_name = False
             out.append(line)
             continue
@@ -191,8 +200,10 @@ def _rewrite_and_collect(top_text, source_name='<string>'):
                 if is_funct2:
                     fudgeQQ = float(fields[3])
                     qi, qj = float(fields[4]), float(fields[5])
+                    v, w = float(fields[6]), float(fields[7])
                 else:
                     fudgeQQ, qi, qj = 0.0, 0.0, 0.0
+                    v, w = float(fields[3]), float(fields[4])
                 if fudgeQQ * qi * qj != 0.0:
                     raise ChargeOverrideError(
                         "%s:%d: [ pairs ] line for atoms %d,%d has a "
@@ -212,6 +223,7 @@ def _rewrite_and_collect(top_text, source_name='<string>'):
                     )
                     continue
                 seen_pairs.add(key)
+                pairs.append((mol_name, i, j, fudgeQQ, qi, qj, v, w))
                 if is_funct2:
                     out.append('%6d %6d 1 %s %s' % (i, j, fields[6], fields[7]))
                 else:
@@ -220,7 +232,7 @@ def _rewrite_and_collect(top_text, source_name='<string>'):
 
         out.append(line)
 
-    return '\n'.join(out), includes
+    return '\n'.join(out), pairs, includes
 
 
 def _resolve_and_rewrite(top_path, output_dir):
@@ -230,23 +242,32 @@ def _resolve_and_rewrite(top_path, output_dir):
     directory, and flattened by basename into `output_dir` so nested
     `#include`s keep resolving once GROMACS/OpenMM parse the copy
     there.
+
+    Returns the accumulated `pairs` list (see `_rewrite_and_collect`)
+    across every file touched, in the order encountered -- `convert_top`
+    ignores it (it only needs the files written to disk); `openmm_compat.
+    load_top` uses it to rebuild each pair's 1-4 interaction on the
+    `System` it builds from the same rewritten text.
     '''
 
     top_path = Path(top_path)
+    pairs = []
     seen = set()
 
     def process(path):
         if path.name in seen:
             return
         seen.add(path.name)
-        rewritten, includes = _rewrite_and_collect(
+        rewritten, file_pairs, includes = _rewrite_and_collect(
             path.read_text(), source_name=path.name
         )
         (output_dir / path.name).write_text(rewritten)
+        pairs.extend(file_pairs)
         for inc_name in includes:
             process(path.parent / inc_name)
 
     process(top_path)
+    return pairs
 
 
 def convert_top(top_path, output_dir):

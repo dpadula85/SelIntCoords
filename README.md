@@ -33,6 +33,7 @@ graph-based logic is general.
 - [`map_atoms` — map atoms between two structures](#map_atoms--map-atoms-between-two-structures)
 - [`renumber_top` — renumber a topology's atoms](#renumber_top--renumber-a-topologys-atoms)
 - [`joyce_to_openmm` — make a topology dual-valid for GROMACS and OpenMM](#joyce_to_openmm--make-a-topology-dual-valid-for-gromacs-and-openmm)
+- [`openmm_compat` — build a correct OpenMM `System`, not just a parseable one](#openmm_compat--build-a-correct-openmm-system-not-just-a-parseable-one)
 - [Python API](#python-api)
 - [Package layout](#package-layout)
 - [Tests](#tests)
@@ -62,6 +63,9 @@ See `requirements.txt`. Notably:
 `map_atoms` and `renumber_top` only need `MDAnalysis`, `networkx`, and
 `numpy` — they do not require `pyscf`/`psi4`. `joyce_to_openmm` needs
 none of the above at all: it is pure standard library (`re`, `pathlib`).
+`openmm_compat` needs `openmm` (`pip install openmm`) — also not listed
+in `requirements.txt`, the same way `psi4` is documented rather than
+declared, since it's the only module in the package that uses it.
 
 ## Workflow overview
 
@@ -239,6 +243,21 @@ does *not* address (comb-rule-dependent unit handling, a dihedral
 multiplicity-0 crash, spurious auto-generated 1-4s at a merged
 junction, a dispersion-correction default mismatch) are also fixed.
 
+**Important: converting the file makes both programs able to *read* it;
+it does not make them compute the *same* energy.** Once a `.top` has
+been through this conversion, real GROMACS reads it and computes the
+correct energy — that's what the conversion was verified against. Bare
+OpenMM (`GromacsTopFile.createSystem()`, with no further patching) will
+now *parse* the same file without crashing, but will still get the
+energy wrong in four more ways that have nothing to do with the file's
+text: a comb-rule-dependent misread of an explicit pair's `V W`, a crash
+on any zero-multiplicity dihedral, auto-generated 1-4 interactions for
+every topological 1-4 pair (wrong the moment a merged junction has one
+with no `[ pairs ]` line), and a dispersion-correction default GROMACS's
+own default doesn't match. Making OpenMM actually *agree* with GROMACS —
+not just read the same file — needs `openmm_compat.load_top` below on
+top of this conversion, not instead of it.
+
 ### CLI
 
 ```bash
@@ -256,6 +275,43 @@ Example, converting a `make_top` output before handing it to OpenMM:
 ```bash
 joyce_to_openmm -p BTBT_symm.top -o BTBT_symm_openmm/ -v
 ```
+
+## `openmm_compat` — build a correct OpenMM `System`, not just a parseable one
+
+A library module (no CLI): `openmm_compat.load_top(top_path, gro_path,
+...)` builds an OpenMM `(topology, system, dropped_dihedral_offset)`
+from a Joyce-generated `.top` + matching `.gro`, patching the *four*
+things `GromacsTopFile.createSystem()` still gets wrong even on a file
+already fixed by `joyce_to_openmm` (see the note above): a comb-rule-
+dependent misread of an explicit pair's `V`/`W`, a crash on any
+zero-multiplicity `[ dihedrals ]` term, auto-generated 1-4 interactions
+for every topological 1-4 pair (only wrong once a merged junction has
+one with no `[ pairs ]` line — never the case for a lone Joyce monomer,
+the only kind of `.top` this package produces, but the fix is applied
+unconditionally and is correct either way), and a dispersion-correction
+default that doesn't match GROMACS's own. It reuses `joyce_to_openmm`'s
+own file-rewriting internals rather than duplicating them, so both the
+file-level and `System`-level fixes come from the same single parse.
+
+This is a deliberate duplication of `oligomer_builder.openmm_compat`
+(where this fix originates and was verified against a real GROMACS
+oracle on 18 real systems, ~20 to ~146 000 atoms) — see that module's
+`HANDOFF.md` entry for the full diagnosis and verification record.
+`oligomer_builder` needs its own copy regardless of this one: the
+auto-generated-1-4-at-a-junction bug only exists once two Joyce
+fragments are merged into one system, which never happens to a `.top`
+this package (SelIntCoords) ever sees.
+
+```python
+from SelIntCoords.openmm_compat import load_top, single_point_energy
+
+topology, system, dropped_offset = load_top("BTBT_symm.top", "BTBT.gro")
+energy, offset = single_point_energy("BTBT_symm.top", "BTBT.gro")
+```
+
+Needs `openmm` (`pip install openmm`) — not in `requirements.txt`,
+matching how `psi4` is already documented rather than declared: this is
+the only module in the package that uses it.
 
 ## Python API
 
@@ -292,6 +348,10 @@ top.write("renumbered.top")
 
 # 4. Make a topology dual-valid for GROMACS and OpenMM
 converted = convert_top("output.top", "output_dir")
+
+# 5. Build a correct OpenMM System from it (not just a parseable one)
+from SelIntCoords.openmm_compat import load_top
+topology, system, dropped_offset = load_top("output.top", "output.gro")
 ```
 
 ## Package layout
@@ -312,6 +372,8 @@ SelIntCoords/
 │   ├── renumber.py        # CLI: renumber a topology's atoms from a map
 │   ├── joyce_to_openmm.py # CLI: rewrite a .top for dual GROMACS/OpenMM
 │   │                      # validity (pure text, no other dependency)
+│   ├── openmm_compat.py   # library: build a correct (not just parseable)
+│   │                      # OpenMM System from a Joyce .top (needs openmm)
 │   ├── blocks.py          # core topology data model (Atom, Molecule,
 │   │                      # Bond/Angle/Dihedral/... Param types, System)
 │   └── top.py             # GROMACS .top parser/writer (TOP class),

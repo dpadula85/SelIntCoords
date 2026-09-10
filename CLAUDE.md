@@ -61,7 +61,25 @@ oligomers/polymers.
   alternative"), which also carries the OpenMM-`System`-internal fixes
   (comb-rule units, dihedral mult=0, spurious auto-1-4s, dispersion
   correction) that are out of scope for this pure `.top`-in/`.top`-out
-  tool.
+  tool. **Converting the file makes both programs able to read it; it
+  does not make them compute the same energy** — see `openmm_compat`
+  below for the piece that closes that gap.
+- `openmm_compat.load_top(top_path, gro_path, ...)` (no CLI, library
+  only) — builds an OpenMM `(topology, system, dropped_dihedral_offset)`
+  that actually agrees with real GROMACS, not just one OpenMM can build
+  without error. Patches the four `createSystem()`-internal mistakes
+  `joyce_to_openmm`'s file-level fix cannot touch (comb-rule-dependent
+  `V`/`W` misread, a zero-multiplicity-dihedral crash, auto-generated
+  1-4s at a merged junction, the dispersion-correction default) by
+  reusing `joyce_to_openmm`'s own rewrite internals rather than
+  duplicating them. A deliberate duplication of `oligomer_builder.
+  openmm_compat` (where this fix originates and was verified against a
+  real GROMACS oracle on 18 systems, ~20 to ~146 000 atoms) —
+  `oligomer_builder` needs its own copy regardless, since the merged-
+  junction bug this fixes can only arise after `oligomer_builder` merges
+  two fragments this package never sees combined. Needs `openmm`
+  (`pip install openmm`), not in `requirements.txt` — the only module
+  here that uses it, documented the same way `psi4` already is.
 
 ## Input format
 
@@ -133,6 +151,8 @@ MDAnalysis 2.7.0, networkx 3.2.1, numpy 1.26.4, pandas 2.2.1, pyscf 2.5.0
 (`requirements.txt`); `psi4` is also required at runtime for
 `make_top`/`sel_intcoords`'s point-group detection (not needed by
 `map_atoms`/`renumber_top`, which use only MDAnalysis/networkx/numpy).
+`openmm` is required only by `openmm_compat.py`, documented here rather
+than declared in `requirements.txt`, same treatment as `psi4`.
 `requirements.yml` is a full conda-env snapshot, much broader than the
 actual runtime dependency set — don't treat it as the minimal spec.
 
