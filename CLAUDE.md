@@ -46,6 +46,22 @@ oligomers/polymers.
   automatically since they hold live `Atom` object references, not
   indices (see `renumber.py`'s module docstring). Strict bijection
   validation by default; `--allow-partial` relaxes it.
+- `joyce_to_openmm -p topology.top -o output_dir/ [-v]` — pure-text
+  converter (no OpenMM/GROMACS dependency, unlike everything else in
+  this pipeline) that rewrites a Joyce-generated `.top` (+ every file it
+  `#include`s) into a copy readable *identically* by both real GROMACS
+  and OpenMM: funct-2 `[ pairs ]` lines rewritten to funct-1, duplicate
+  `[ pairs ]` lines for the same atom pair commented out (not deleted),
+  `[ defaults ]`'s global `fudgeQQ` forced to 0 (raises
+  `ChargeOverrideError` if any kept pair's own `fudgeQQ*qi*qj` is
+  nonzero, since that value cannot survive the funct-1 rewrite). See
+  `joyce_to_openmm.py`'s module docstring for the three bugs this fixes
+  and how they were found; verified against a real GROMACS oracle in
+  `oligomer_builder` (`HANDOFF.md`, "OpenMM as a future GROMACS
+  alternative"), which also carries the OpenMM-`System`-internal fixes
+  (comb-rule units, dihedral mult=0, spurious auto-1-4s, dispersion
+  correction) that are out of scope for this pure `.top`-in/`.top`-out
+  tool.
 
 ## Input format
 

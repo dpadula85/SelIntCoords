@@ -32,6 +32,7 @@ graph-based logic is general.
 - [`make_top` — build a topology with grouped internal coordinates](#make_top--build-a-topology-with-grouped-internal-coordinates)
 - [`map_atoms` — map atoms between two structures](#map_atoms--map-atoms-between-two-structures)
 - [`renumber_top` — renumber a topology's atoms](#renumber_top--renumber-a-topologys-atoms)
+- [`joyce_to_openmm` — make a topology dual-valid for GROMACS and OpenMM](#joyce_to_openmm--make-a-topology-dual-valid-for-gromacs-and-openmm)
 - [Python API](#python-api)
 - [Package layout](#package-layout)
 - [Tests](#tests)
@@ -44,8 +45,8 @@ cd SelIntCoords
 pip install -e .
 ```
 
-This installs the package and three console scripts: `make_top`,
-`map_atoms`, and `renumber_top`.
+This installs the package and four console scripts: `make_top`,
+`map_atoms`, `renumber_top`, and `joyce_to_openmm`.
 
 ### Requirements
 
@@ -59,7 +60,8 @@ See `requirements.txt`. Notably:
 - `numpy`, `pandas`
 
 `map_atoms` and `renumber_top` only need `MDAnalysis`, `networkx`, and
-`numpy` — they do not require `pyscf`/`psi4`.
+`numpy` — they do not require `pyscf`/`psi4`. `joyce_to_openmm` needs
+none of the above at all: it is pure standard library (`re`, `pathlib`).
 
 ## Workflow overview
 
@@ -204,6 +206,57 @@ map_atoms   -r crystal.xyz -t BTBT_symm_geometry.xyz -m map.txt
 renumber_top -p BTBT_symm.top -m map.txt -o BTBT_symm.renumbered.top -v
 ```
 
+## `joyce_to_openmm` — make a topology dual-valid for GROMACS and OpenMM
+
+Rewrites a Joyce-generated `.top` (and every file it `#include`s) into a
+copy that real GROMACS and OpenMM read **identically**. It fixes three
+things purely in the file's own text, never loading GROMACS, OpenMM, or
+any simulation package itself:
+
+- `[ pairs ]` funct 2 (`ai aj 2 fudgeQQ qi qj V W`, Joyce's format for
+  *every* 1-4-or-further nonbonded pair) is rejected outright by
+  OpenMM's topology reader, which only understands funct 1
+  (`ai aj 1 V W`) — rewritten accordingly.
+- `[ pairs ]` is a *list*, not a *set*: the same atom pair can
+  legitimately appear on more than one line, and GROMACS sums every
+  listed line as an independent interaction. A duplicate line for a
+  pair already seen is commented out (kept, tagged `; DUPLICATE ...`,
+  never deleted), first occurrence kept live.
+- A funct-1 line has no per-pair charge override, so naively rewriting
+  funct 2 to funct 1 can silently reintroduce a nonzero 1-4 Coulomb
+  term. `[ defaults ]`'s global `fudgeQQ` is forced to `0.0` to prevent
+  this — safe only once every kept pair is confirmed to have
+  `fudgeQQ*qi*qj == 0`; if one doesn't, conversion is refused
+  (`ChargeOverrideError`) rather than silently producing a file GROMACS
+  and OpenMM would disagree on.
+
+See `joyce_to_openmm.py`'s module docstring for the full diagnosis of
+each of the three issues above, including how each was confirmed real.
+Verified against a real GROMACS single-point-energy oracle on 18 real
+systems (~20 to ~146 000 atoms) in the `oligomer_builder` pipeline
+package, where the OpenMM-`System`-internal issues this pure converter
+does *not* address (comb-rule-dependent unit handling, a dihedral
+multiplicity-0 crash, spurious auto-generated 1-4s at a merged
+junction, a dispersion-correction default mismatch) are also fixed.
+
+### CLI
+
+```bash
+joyce_to_openmm -p topology.top -o output_dir/ [-v]
+```
+
+| Flag | Description |
+|---|---|
+| `-p, --top` | Topology to convert. **Required.** |
+| `-o, --output-dir` | Directory the converted topology (and any `#include`d file it needs) is written into. **Required.** |
+| `-v, --verbose` | Print progress information. |
+
+Example, converting a `make_top` output before handing it to OpenMM:
+
+```bash
+joyce_to_openmm -p BTBT_symm.top -o BTBT_symm_openmm/ -v
+```
+
 ## Python API
 
 Everything above is also usable programmatically.
@@ -214,6 +267,7 @@ from SelIntCoords.sel_intcoords import list_intcoords
 from SelIntCoords.make_top import add_terms, geom_avg_mixing
 from SelIntCoords.map_atoms import AtomMapper
 from SelIntCoords.renumber import read_map, renumber_molecule
+from SelIntCoords.joyce_to_openmm import convert_top, ChargeOverrideError
 
 # 1. Derive internal coordinates and build a topology
 data = list_intcoords("geometry.xyz")
@@ -235,6 +289,9 @@ top = TOP("output.top")
 renummap = read_map("map.txt")
 renumber_molecule(top.molecules[0], renummap)
 top.write("renumbered.top")
+
+# 4. Make a topology dual-valid for GROMACS and OpenMM
+converted = convert_top("output.top", "output_dir")
 ```
 
 ## Package layout
@@ -253,6 +310,8 @@ SelIntCoords/
 │   ├── map_atoms.py       # CLI: graph-isomorphism + RMSD atom mapping
 │   │                      # between two structures
 │   ├── renumber.py        # CLI: renumber a topology's atoms from a map
+│   ├── joyce_to_openmm.py # CLI: rewrite a .top for dual GROMACS/OpenMM
+│   │                      # validity (pure text, no other dependency)
 │   ├── blocks.py          # core topology data model (Atom, Molecule,
 │   │                      # Bond/Angle/Dihedral/... Param types, System)
 │   └── top.py             # GROMACS .top parser/writer (TOP class),
@@ -286,4 +345,5 @@ bash run_test.sh
 
 This produces `BTBT_symm.top`, `DNBDT_symm.top`, and `PN_symm.top` (plus
 their `.csv` and `_deps.dat` companions) to compare against known-good
-references.
+references, then runs `joyce_to_openmm` on `BTBT_symm.top` as a smoke
+test of the conversion.

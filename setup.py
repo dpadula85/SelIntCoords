@@ -34,6 +34,7 @@ setup(
             'make_top=SelIntCoords.make_top:main',
             'map_atoms=SelIntCoords.map_atoms:main',
             'renumber_top=SelIntCoords.renumber:main',
+            'joyce_to_openmm=SelIntCoords.joyce_to_openmm:main',
             ]
         },
     zip_safe=False
