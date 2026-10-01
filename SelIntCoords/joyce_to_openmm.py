@@ -75,6 +75,7 @@ for those and the full verification record.
 
 import argparse as arg
 import logging
+import os
 import re
 from pathlib import Path
 
@@ -83,6 +84,16 @@ log = logging.getLogger("joyce_to_openmm")
 _SECTION_RE = re.compile(r'^\s*\[\s*([a-zA-Z_]+)\s*\]')
 _INCLUDE_RE = re.compile(r'^\s*#include\s+"([^"]+)"')
 _DEFAULTS_LINE_RE = re.compile(r'^(\s*\S+\s+\S+\s+\S+\s+\S+\s+)(\S+)(.*)$')
+
+
+class UnparameterisedPairError(ValueError):
+    '''Raised when a `[ pairs ]` line carries no explicit LJ parameters.
+
+    A Joyce `[ pairs ]` line always gives its own `V W`. A bare `ai aj 1`
+    line would take its parameters from `[ pairtypes ]` or `gen-pairs`,
+    which `openmm_compat`'s pair rebuild never consults, so the pair
+    would silently vanish from the `System`.
+    '''
 
 
 class ChargeOverrideError(ValueError):
@@ -229,6 +240,11 @@ def _rewrite_and_collect(top_text, source_name='<string>'):
                 else:
                     out.append(line)
                 continue
+            raise UnparameterisedPairError(
+                "%s:%d: [ pairs ] line %r has no explicit V W -- only "
+                "explicit funct-1 (ai aj 1 V W) or funct-2 (ai aj 2 fudgeQQ "
+                "qi qj V W) lines are supported." % (source_name, lineno, stripped)
+            )
 
         out.append(line)
 
@@ -239,35 +255,46 @@ def _resolve_and_rewrite(top_path, output_dir):
     '''Recursively rewrites `top_path` and every file it `#include`s.
 
     `#include`s are resolved relative to each including file's own
-    directory, and flattened by basename into `output_dir` so nested
-    `#include`s keep resolving once GROMACS/OpenMM parse the copy
-    there.
+    directory (GROMACS semantics). The rewritten files are written under
+    `output_dir` mirroring their layout relative to the deepest directory
+    common to all of them, so every `#include` line keeps resolving
+    unchanged -- including `../` paths and two same-named `.itp` files in
+    different directories.
 
-    Returns the accumulated `pairs` list (see `_rewrite_and_collect`)
-    across every file touched, in the order encountered -- `convert_top`
-    ignores it (it only needs the files written to disk); `openmm_compat.
-    load_top` uses it to rebuild each pair's 1-4 interaction on the
-    `System` it builds from the same rewritten text.
+    Returns `(pairs, top_out)`: the accumulated `pairs` list (see
+    `_rewrite_and_collect`) across every file, in the order encountered,
+    and the path of the rewritten top-level file inside `output_dir`.
     '''
 
-    top_path = Path(top_path)
+    top_path = Path(top_path).resolve()
+    output_dir = Path(output_dir)
     pairs = []
-    seen = set()
+    files = {}
 
-    def process(path):
-        if path.name in seen:
+    def process(path, included_from=None):
+        path = path.resolve()
+        if path in files:
             return
-        seen.add(path.name)
+        if not path.is_file():
+            raise FileNotFoundError(
+                "#include \"%s\" (from %s) not found"
+                % (path, included_from or "<top>")
+            )
         rewritten, file_pairs, includes = _rewrite_and_collect(
             path.read_text(), source_name=path.name
         )
-        (output_dir / path.name).write_text(rewritten)
+        files[path] = rewritten
         pairs.extend(file_pairs)
         for inc_name in includes:
-            process(path.parent / inc_name)
+            process(path.parent / inc_name, included_from=path)
 
     process(top_path)
-    return pairs
+    root = Path(os.path.commonpath([str(f.parent) for f in files]))
+    for path, rewritten in files.items():
+        target = output_dir / path.relative_to(root)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(rewritten)
+    return pairs, output_dir / top_path.relative_to(root)
 
 
 def convert_top(top_path, output_dir):
@@ -284,22 +311,25 @@ def convert_top(top_path, output_dir):
     Returns
     -------
     converted: Path.
-        Path to the converted top-level file (same basename as
-        `top_path`, inside `output_dir`); every `#include`d file it
-        needed is written alongside it, ready for `gmx grompp` or an
-        OpenMM `GromacsTopFile` loader.
+        Path to the converted top-level file inside `output_dir`; every
+        `#include`d file it needed is written alongside it, keeping the
+        original relative layout, ready for `gmx grompp` or an OpenMM
+        `GromacsTopFile` loader.
 
     Raises
     ------
     ChargeOverrideError.
         See this module's docstring, fix 3.
+    UnparameterisedPairError.
+        A `[ pairs ]` line carries no explicit V W.
+    FileNotFoundError.
+        An `#include`d file does not exist.
     '''
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    top_path = Path(top_path)
-    _resolve_and_rewrite(top_path, output_dir)
-    return output_dir / top_path.name
+    _, converted = _resolve_and_rewrite(top_path, output_dir)
+    return converted
 
 
 def options():
@@ -342,7 +372,7 @@ def main():
 
     try:
         converted = convert_top(Opts["TopFile"], Opts["OutDir"])
-    except ChargeOverrideError as e:
+    except (ChargeOverrideError, UnparameterisedPairError) as e:
         log.error("Conversion refused: %s", e)
         raise SystemExit(1)
 

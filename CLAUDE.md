@@ -64,6 +64,13 @@ oligomers/polymers.
   tool. **Converting the file makes both programs able to read it; it
   does not make them compute the same energy** — see `openmm_compat`
   below for the piece that closes that gap.
+  `#include`s are resolved relative to each including file and the
+  rewritten copies keep that directory layout (no basename flattening,
+  so `../ffs/x.itp` and same-named `.itp`s in different directories
+  work). A `[ pairs ]` line without explicit `V W` raises
+  `UnparameterisedPairError` (a bare `ai aj 1` would take its values
+  from `[ pairtypes ]`/`gen-pairs`, which the pair rebuild never reads,
+  so the pair would silently vanish).
 - `openmm_compat.load_top(top_path, gro_path, ...)` (no CLI, library
   only) — builds an OpenMM `(topology, system, dropped_dihedral_offset)`
   that actually agrees with real GROMACS, not just one OpenMM can build
@@ -80,6 +87,17 @@ oligomers/polymers.
   two fragments this package never sees combined. Needs `openmm`
   (`pip install openmm`), not in `requirements.txt` — the only module
   here that uses it, documented the same way `psi4` already is.
+  `load_top(top, gro=None, nonbonded_method=app.NoCutoff)` is the
+  vacuum path (GROMACS `pbc = no`, infinite cut-offs): no `.gro`/box
+  needed. The dispersion flag is applied to every `NonbondedForce` and
+  `CustomNonbondedForce` after `createSystem` (OpenMM 8.2 rejects the
+  keyword; 8.6 leaves the comb-rule-3 `CustomNonbondedForce` correction
+  on by default). Checked against `gmx_d -rerun` (2020.5) on 33 `.top`
+  files in `QMD-FFs` (identical `.gro` coordinates: <= 2e-3 kJ/mol,
+  except the PM6 multimers at 0.01-0.05 kJ/mol, where a hand sum of the
+  pair lines reproduces OpenMM's LJ-14, not GROMACS's) and against the
+  per-term `Scan.dat` of three DTS and one Y6 relaxed scans (73 frames
+  each, <= 1e-3 kJ/mol per term).
 
 ## Input format
 

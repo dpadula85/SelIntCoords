@@ -245,12 +245,36 @@ def _rebuild_onefour_interactions(system, top, ordered_pairs):
             base += n_atoms
 
 
-def load_top(top_path, gro_path, nonbonded_cutoff=1.2 * unit.nanometer,
+def _set_dispersion_correction(system, enabled):
+    '''Sets the long-range LJ tail correction on *every* nonbonded force.
+
+    `createSystem(useDispersionCorrection=...)` is not enough: for
+    comb-rule 1/3 the LJ lives in `CustomNonbondedForce`s
+    (`LennardJonesForce`, NBFIX) that OpenMM >= 8.6 configures separately,
+    and OpenMM 8.2 rejects the keyword outright. Setting it here, after
+    the `System` exists, works on both.
+    '''
+    for force in system.getForces():
+        if isinstance(force, mm.NonbondedForce):
+            force.setUseDispersionCorrection(enabled)
+        elif isinstance(force, mm.CustomNonbondedForce):
+            force.setUseLongRangeCorrection(enabled)
+
+
+def load_top(top_path, gro_path=None, nonbonded_cutoff=1.2 * unit.nanometer,
              use_dispersion_correction=False, nonbonded_method=app.CutoffPeriodic,
-             constraints=None):
+             constraints=None, remove_cm_motion=True):
     '''Parses `top_path`/`gro_path` into an OpenMM `(topology, system)`
     pair that computes the same energy real GROMACS does -- not just
     one that OpenMM can build without error.
+
+    `top_path` may `#include` other files (`.itp`), resolved relative to
+    each including file, as GROMACS does.
+
+    `gro_path` supplies the periodic box and is required for periodic
+    `nonbonded_method`s. For an isolated molecule pass
+    `nonbonded_method=app.NoCutoff` (GROMACS `pbc = no` with infinite
+    cut-offs) and `gro_path` may be omitted.
 
     Every `[ dihedrals ]` funct-1 term with multiplicity 0 is dropped
     from the returned `System`; its total energy -- a constant,
@@ -260,34 +284,45 @@ def load_top(top_path, gro_path, nonbonded_cutoff=1.2 * unit.nanometer,
 
     `use_dispersion_correction=False` by default, matching GROMACS's
     own default (`DispCorr = no`); pass `True` for a real MD run whose
-    `.mdp`/protocol turns dispersion correction on.
+    `.mdp`/protocol turns dispersion correction on. Applied to every
+    nonbonded force (see `_set_dispersion_correction`).
 
     `nonbonded_method=app.CutoffPeriodic` by default (reaction-field-
     shifted cutoff); pass `app.PME` to match a real GROMACS `coulombtype
-    = PME` run instead. `_add_unshifted_coulomb_correction` (cancels
-    `CutoffPeriodic`'s own implicit shift) is only applied when
-    `nonbonded_method is app.CutoffPeriodic` -- meaningless under PME.
+    = PME` run, or `app.NoCutoff` for a molecule in vacuum.
+    `_add_unshifted_coulomb_correction` (cancels `CutoffPeriodic`'s own
+    implicit shift) is only applied when `nonbonded_method is
+    app.CutoffPeriodic`.
 
     `constraints=None` by default; pass `app.HBonds` to match a real
-    run's GROMACS `constraints = h-bonds` (OpenMM's own CCMA solver
-    enforces it, not GROMACS's LINCS -- same physical constraint,
-    different algorithm).
+    run's GROMACS `constraints = h-bonds`.
+
+    `remove_cm_motion=True` by default -- adds a `CMMotionRemover`,
+    matching GROMACS's default `comm-mode = Linear`. No effect on
+    potential energies.
 
     Returns `(topology, system, dropped_dihedral_offset)`.
     '''
-    gro = app.GromacsGroFile(str(gro_path))
-    top_path = Path(top_path)
+    periodic = nonbonded_method not in (app.NoCutoff, app.CutoffNonPeriodic)
+    box = None
+    if gro_path is not None:
+        box = app.GromacsGroFile(str(gro_path)).getPeriodicBoxVectors()
+    elif periodic:
+        raise ValueError("gro_path is required for a periodic nonbonded_method")
+    if not periodic:
+        box = None
 
     with tempfile.TemporaryDirectory() as workdir:
-        workdir = Path(workdir)
-        ordered_pairs = _resolve_and_rewrite(top_path, workdir)
-        top = app.GromacsTopFile(str(workdir / top_path.name),
-                                  periodicBoxVectors=gro.getPeriodicBoxVectors())
-        system = top.createSystem(nonbondedMethod=nonbonded_method,
-                                   nonbondedCutoff=nonbonded_cutoff,
-                                   useDispersionCorrection=use_dispersion_correction,
-                                   constraints=constraints)
+        ordered_pairs, rewritten_top = _resolve_and_rewrite(top_path, Path(workdir))
+        top = app.GromacsTopFile(str(rewritten_top), periodicBoxVectors=box)
+        create_kwargs = dict(nonbondedMethod=nonbonded_method,
+                             constraints=constraints,
+                             removeCMMotion=remove_cm_motion)
+        if nonbonded_method is not app.NoCutoff:
+            create_kwargs['nonbondedCutoff'] = nonbonded_cutoff
+        system = top.createSystem(**create_kwargs)
 
+    _set_dispersion_correction(system, use_dispersion_correction)
     _rebuild_onefour_interactions(system, top, ordered_pairs)
     if nonbonded_method is app.CutoffPeriodic:
         nb = next(f for f in system.getForces() if isinstance(f, mm.NonbondedForce))
@@ -296,7 +331,7 @@ def load_top(top_path, gro_path, nonbonded_cutoff=1.2 * unit.nanometer,
     return top, system, dropped_offset
 
 
-def single_point_energy(top_path, gro_path, platform_name='Reference'):
+def single_point_energy(top_path, gro_path, platform_name='Reference', **load_kwargs):
     '''Real single-point potential energy via OpenMM, with the fixes
     above applied. Matches GROMACS's own to float32/float64 rounding
     (verified in `oligomer_builder`, where this fix originates -- see
@@ -307,10 +342,13 @@ def single_point_energy(top_path, gro_path, platform_name='Reference'):
     this fix was verified against. Pass `platform_name=None` to let
     OpenMM auto-select the fastest platform actually present instead.
 
+    `load_kwargs` are passed to `load_top` (e.g. `nonbonded_method=
+    app.NoCutoff` for a molecule in vacuum).
+
     Returns `(total_energy_kJ_per_mol, dropped_dihedral_offset)`;
     `total_energy_kJ_per_mol` already has the offset added back in.
     '''
-    top, system, offset = load_top(top_path, gro_path)
+    top, system, offset = load_top(top_path, gro_path, **load_kwargs)
     gro = app.GromacsGroFile(str(gro_path))
 
     integrator = mm.VerletIntegrator(1.0 * unit.femtosecond)
