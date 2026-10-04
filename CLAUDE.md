@@ -12,7 +12,7 @@ provides standalone atom-mapping/renumbering utilities to reconcile
 different atom numbering schemes between two structures of the same
 molecule (e.g. an experimental crystal geometry vs. a force-field
 geometry). Targets rigid/(semi-)planar organic-semiconductor cores with
-optional flexible side chains (tests: BTBT, DNBDT, pentacene).
+optional flexible side chains (examples: BTBT, DNBDT, pentacene; `examples/` has the inputs, `tests/` the pytest suite, CI skips the psi4 test).
 
 ## Role in the pipeline
 

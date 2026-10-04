@@ -1,0 +1,36 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # chain_cropper is not on PyPI, so it is installed from its repository.
+      - uses: actions/checkout@v4
+        with:
+          repository: dpadula85/chain_cropper
+          path: chain_cropper
+
+      # psi4 (point-group detection in make_top) is conda-only and is not
+      # installed here: the tests that need it skip themselves.
+      - name: Install package and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ./chain_cropper
+          pip install -e .
+          pip install pytest openmm
+
+      - name: Run tests
+        run: pytest tests/ -v

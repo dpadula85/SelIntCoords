@@ -272,6 +272,7 @@ def _resolve_and_rewrite(top_path, output_dir):
     files = {}
 
     def process(path, included_from=None):
+        '''Rewrite `path` and, recursively, every file it #includes.'''
         path = path.resolve()
         if path in files:
             return
@@ -363,6 +364,7 @@ def options():
 
 
 def main():
+    '''Entry point of the `joyce_to_openmm` console script.'''
     Opts = options()
 
     logging.basicConfig(

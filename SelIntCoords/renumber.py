@@ -166,6 +166,7 @@ def options():
 
 
 def main():
+    '''Entry point of the `renumber_top` console script.'''
     Opts = options()
 
     logging.basicConfig(

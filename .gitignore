@@ -8,3 +8,10 @@
 *.dx
 *.vmd
 *.pdf
+timer.dat
+examples/*_symm*
+examples/joyce_to_openmm_out/
+__pycache__/
+.pytest_cache/
+examples/map.txt
+examples/*.renumbered.top

@@ -1,5 +1,11 @@
 #!/usr/bin/env python
 
+'''
+make_top - complete a minimal GROMACS .top (atoms/atomtypes only) with every
+bond, angle, dihedral, improper, 1-n LJ pair and exclusion derived from a
+geometry, plus the Joyce $dependence file and a coordinate-count CSV.
+'''
+
 import sys
 import csv
 import numpy as np
@@ -200,6 +206,30 @@ def add_terms(
         excls=None,
         mixing=geom_avg_mixing
     ):
+    '''
+    Append bonded terms and 1-n Lennard-Jones pairs, all with zero
+    parameters to be fitted by Joyce, to the first molecule of a topology.
+
+    Parameters
+    ----------
+    topfile: str.
+        Initial topology (atoms and atomtypes only).
+    bds, angs, stiffs, imps, flexs: np.ndarray.
+        Bonds, angles, stiff proper, improper and flexible proper dihedrals,
+        as 0-based atom indices (from `sel_intcoords.list_intcoords`).
+    LJs: dict.
+        Lennard-Jones pairs by separation (1,4, 1,5, 1,6, 1,7, other).
+    excls: np.ndarray (shape: (N, 2)).
+        Pairs excluded from non-bonded interactions.
+    mixing: callable.
+        Mixing rule `f(eps_i, eps_j, sig_i, sig_j) -> (eps_ij, sig_ij)` for
+        the pair parameters; `geom_avg_mixing` or `avg_mixing`.
+
+    Returns
+    -------
+    topobj: TOP.
+        The completed topology, ready to be written.
+    '''
 
     topobj = TOP(topfile)
 
@@ -326,6 +356,23 @@ def add_terms(
 
 
 def find_deps(coords, eqs):
+    '''
+    Find internal coordinates that are equivalent by symmetry.
+
+    Parameters
+    ----------
+    coords: np.ndarray (shape: (N, k)).
+        Internal coordinates as atom indices.
+    eqs: dict.
+        Maps each atom index to the array of atoms equivalent to it.
+
+    Returns
+    -------
+    equivs: np.ndarray (shape: (M, 2)).
+        Pairs of indices into `coords`, smaller first, of coordinates that
+        map onto each other under the atom equivalences; a single empty
+        row if there are none.
+    '''
 
     for c, coord in enumerate(coords):
 
@@ -364,6 +411,7 @@ def find_deps(coords, eqs):
 
 
 def main():
+    '''Entry point of the `make_top` console script.'''
     Opts = options()
 
     # Read in topology

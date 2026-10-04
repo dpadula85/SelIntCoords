@@ -1,5 +1,10 @@
 #!/usr/bin/env python
 
+'''
+dihed_deps - group the stiff (ring) proper dihedrals that must share a force
+constant, as Joyce $dependence entries.
+'''
+
 import numpy as np
 
 

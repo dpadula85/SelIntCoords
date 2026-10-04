@@ -268,6 +268,7 @@ def options() -> dict:
 
 
 def main() -> None:
+    '''Entry point of the `map_atoms` console script.'''
     Opts = options()
 
     logging.basicConfig(

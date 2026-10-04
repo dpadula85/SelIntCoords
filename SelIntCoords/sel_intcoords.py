@@ -1,5 +1,11 @@
 #!/usr/bin/env python
 
+'''
+sel_intcoords - select the internal coordinates of a molecule from its
+connectivity (bonds, angles, stiff/flexible dihedrals, impropers, 1-n LJ
+pairs, exclusions) and the atoms equivalent by point-group or local symmetry.
+'''
+
 import sys
 import itertools
 import numpy as np
@@ -8,23 +14,17 @@ import networkx as nx
 import MDAnalysis as mda
 from MDAnalysis.lib.util import unique_rows
 
-# get_sp2 used to be defined here (and, separately, in
-# oligomer_builder.enhanced_breaker) as a byte-for-byte copy carrying the
-# same latent bug: `if alkyl: ... elif ether: ...` with `alkyl` defaulting
-# True meant the `ether` branch could never fire unless a caller also
-# passed `alkyl=False`, which nothing did. chain_cropper.topology now
-# carries the single, fixed implementation; both call sites import it.
 from chain_cropper.topology import get_sp2
 
 try:
-    import psi4
     from pyscf.symm.geom import detect_symm, symm_identical_atoms
-except:
+except ImportError:
+    detect_symm = symm_identical_atoms = None
+
+try:
     import psi4
-    from pyscf.symm.geom import detect_symm, symm_identical_atoms
-finally:
-    import psi4
-    from pyscf.symm.geom import detect_symm, symm_identical_atoms
+except ImportError:
+    psi4 = None
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -341,6 +341,12 @@ def get_equivalent_atoms(u):
     eq_ats: dict.
         Dictionary of equivalent atoms.
     '''
+
+    if psi4 is None or detect_symm is None:
+        raise ImportError(
+            "Symmetry detection needs psi4 (conda install -c conda-forge "
+            "psi4) and pyscf"
+        )
 
     # Symmetrise molecule to detect point group
     m = psi4.core.Molecule.from_arrays(
