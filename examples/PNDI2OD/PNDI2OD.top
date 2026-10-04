@@ -1,0 +1,102 @@
+ [ defaults ]
+; nbfunc   comb-rule   gen-pairs  fudgeLJ  fudgeQQ
+     1       3           no         1.0       0.0
+ 
+ [ atomtypes ]
+; name     mass    charge ptype    sigma       espilon
+   STh    32.0600   0.000   A    3.55000e-01  1.04600e+00  ; OPLS_633
+   CTh    12.0110   0.000   A    3.55000e-01  2.92880e-01  ; OPLS_145
+   HTh2    1.0079   0.000   A    2.42000e-01  1.25520e-01  ; OPLS_146
+   HTh3    1.0079   0.000   A    2.42000e-01  1.25520e-01  ; OPLS_146
+   CT     12.0110   0.000   A    3.50000e-01  2.76144e-01  ; OPLS_139
+   HT      1.0079   0.000   A    2.50000e-01  1.25520e-01  ; OPLS_140
+   CPA    12.01100  0.000   A    3.75000e-01  4.39320e-01  ; OPLS_234   
+   OPA    15.99940  0.000   A    2.96000e-01  8.78640e-01  ; OPLS_236   
+   NPA    14.0070   0.000   A    3.25000e-01  7.11280e-01  ; OPLS_239   
+   NTD    14.0070   0.000   A    3.25000e-01  7.11280e-01  ; OPLS_557
+   STD    32.0600   0.000   A    3.55000e-01  1.04600e+00  ; OPLS_633
+   CC     12.0110   0.000   A    3.55000e-01  2.92880e-01  ; OPLS_145
+   HC      1.0079   0.000   A    2.42000e-01  1.25520e-01  ; OPLS_146
+
+ [ moleculetype ]
+; Name     nrexcl
+ PND         3
+ 
+ [ atoms ]
+; nr  type  resnr residue  atom  cgnr    charge     mass
+   1   CC    1    PND      CC     1      0.115556   12.0110  
+   2   CC    1    PND      CC     2      0.140889   12.0110  
+   3   CC    1    PND      CC     3     -0.287943   12.0110  
+   4   CC    1    PND      CC     4      0.234518   12.0110  
+   5   CC    1    PND      CC     5      0.022548   12.0110  
+   6   CC    1    PND      CC     6     -0.258628   12.0110  
+   7   CC    1    PND      CC     7     -0.167580   12.0110  
+   8   CC    1    PND      CC     8     -0.056635   12.0110  
+   9   CC    1    PND      CC     9      0.426557   12.0110  
+  10   CC    1    PND      CC    10     -0.497894   12.0110  
+  11   HC    1    PND      HC    11     -0.396015    1.0079  
+  12   HC    1    PND      HC    12     -0.087814    1.0079  
+  13   HC    1    PND      HC    13     -0.001326    1.0079  
+  14   CTh   1    PND      CTh   14     -0.227350   12.0110  
+  15   CTh   1    PND      CTh   15      0.334214   12.0110  
+  16   CTh   1    PND      CTh   16     -0.237135   12.0110  
+  17   HTh3  1    PND      HTh3  17      0.681508    1.0079  
+  18   CTh   1    PND      CTh   18      0.701859   12.0110  
+  19   STh   1    PND      STh   19     -0.513285   32.0600  
+  20   HTh3  1    PND      HTh3  20      0.776463    1.0079  
+  21   CTh   1    PND      CTh   21     -0.527145   12.0110  
+  22   CTh   1    PND      CTh   22      0.701834   12.0110  
+  23   CTh   1    PND      CTh   23      0.209519   12.0110  
+  24   HTh3  1    PND      HTh3  24      0.184652    1.0079  
+  25   CTh   1    PND      CTh   25      0.082519   12.0110  
+  26   STh   1    PND      STh   26     -0.451212   32.0600  
+  27   HTh3  1    PND      HTh3  27     -0.451815    1.0079  
+  28   HTh2  1    PND      HTh2  28     -0.496452    1.0079  
+  29   CPA   1    PND      CPA   29     -0.407679   12.0110  
+  30   CPA   1    PND      CPA   30      0.223533   12.0110  
+  31   CPA   1    PND      CPA   31     -0.222151   12.0110  
+  32   CPA   1    PND      CPA   32      0.019256   12.0110  
+  33   NPA   1    PND      NPA   33      0.019256   14.0070  
+  34   NPA   1    PND      NPA   34      0.065050   14.0070  
+  35   OPA   1    PND      OPA   35      0.065050   15.99940  
+  36   OPA   1    PND      OPA   36      0.065050   15.99940  
+  37   OPA   1    PND      OPA   37      0.209526   15.99940  
+  38   OPA   1    PND      OPA   38     -0.214067   15.99940  
+  39   CT    1    PND      CT    39      0.020976   12.0110  
+  40   CT    1    PND      CT    40      0.020976   12.0110  
+  41   CT    1    PND      CT    41      0.063226   12.0110  
+  42   HT    1    PND      HT    42      0.063226    1.0079  
+  43   HT    1    PND      HT    43      0.063226    1.0079  
+  44   HT    1    PND      HT    44     -0.344627    1.0079  
+  45   HT    1    PND      HT    45      0.217262    1.0079  
+  46   HT    1    PND      HT    46      0.207716    1.0079  
+  47   CT    1    PND      CT    47      0.391851   12.0110  
+  48   HT    1    PND      HT    48      0.365634    1.0079 
+  49   HT    1    PND      HT    49     -0.484690    1.0079 
+  50   HT    1    PND      HT    50      0.230495    1.0079 
+  51   HT    1    PND      HT    51     -0.212058    1.0079 
+  52   HT    1    PND      HT    52      0.333919    1.0079 
+
+
+; Strtchings
+[ bonds ]
+
+
+; Bendings
+[ angles ]
+; ring A
+
+
+; Torsions
+[ dihedrals ]
+; harmonic dihedrals
+; aromatic ring skeleton A
+
+
+ [ system ]
+; Name
+ PND
+ 
+ [ molecules ]
+; Compound      #mols
+  PND             1

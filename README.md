@@ -24,7 +24,7 @@ it to an experimental structure, and making it read identically by GROMACS
 and OpenMM.
 
 It targets rigid, (semi-)planar organic semiconductor cores with optional
-alkyl/ether side chains (examples: BTBT, DNBDT, pentacene). The
+alkyl/ether side chains (examples: BTBT, DNBDT, pentacene, DPP, D18). The
 output feeds [oligomer_builder](https://github.com/dpadula85/oligomer_builder).
 
 ## Installation
@@ -171,19 +171,12 @@ convert_top("output.top", "out_dir")
 
 ## Examples
 
-| Directory content | Shows |
-|---|---|
-| [examples/](examples/) `BTBT`, `DNBDT`, `PN` | three cores (each a minimal `.top` and `.xyz`) |
-| [run_example.sh](examples/run_example.sh) | `make_top` on all three, then `joyce_to_openmm` (needs psi4) |
-| [run_example.py](examples/run_example.py) | the same workflow through the Python API |
-
-Resulting term counts (from `make_top`):
-
-| Core | Bonds | Angles | Stiff dihedrals | Flexible dihedrals | Impropers |
-|---|---|---|---|---|---|
-| BTBT | 39 | 68 | 34 | 30 | 14 |
-| DNBDT | 48 | 80 | 64 | 0 | 26 |
-| PN | 40 | 66 | 52 | 0 | 22 |
+[examples/](examples/) holds seven molecules, each with the two inputs
+`make_top` needs: three cores (BTBT, DNBDT, pentacene) and four from
+Joyce parameterisations (DPP, PNDI2OD, D18, PBDTTT-O). `run_example.sh`
+runs `make_top` on all of them, then `joyce_to_openmm`;
+`run_example.py` runs the same steps for BTBT through the Python API. The
+examples README lists the number of terms found for each.
 
 ## Package layout
 

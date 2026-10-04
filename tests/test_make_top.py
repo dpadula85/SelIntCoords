@@ -18,6 +18,10 @@ COUNTS = {
     "BTBT": (39, 68, 34, 14, 30, (82, 81, 75, 55, 230)),
     "DNBDT": (48, 80, 64, 26, 0, (103, 106, 91, 79, 354)),
     "PN": (40, 66, 52, 22, 0, (89, 92, 79, 64, 200)),
+    "DPP": (51, 88, 46, 20, 38, (100, 99, 114, 119, 464)),
+    "PNDI2OD": (57, 98, 52, 24, 38, (124, 132, 141, 137, 637)),
+    "D18": (97, 167, 84, 36, 80, (195, 206, 222, 210, 2644)),
+    "PBDTTT-O": (69, 118, 54, 25, 60, (135, 134, 149, 151, 1197)),
 }
 
 
@@ -28,15 +32,15 @@ def no_symmetry(monkeypatch):
 
 @pytest.mark.parametrize("name", COUNTS)
 def test_internal_coordinate_counts(name, examples, no_symmetry):
-    bds, angs, stiff, imps, flex, LJs, excls, rings, eq = si.list_intcoords(str(examples / f"{name}.xyz"))
+    bds, angs, stiff, imps, flex, LJs, excls, rings, eq = si.list_intcoords(str(examples / name / f"{name}.xyz"))
     nb, na, ns, ni, nf, nlj = COUNTS[name]
     assert (len(bds), len(angs), len(stiff), len(imps), len(flex)) == (nb, na, ns, ni, nf)
     assert tuple(len(LJs[k]) for k in ("1,4", "1,5", "1,6", "1,7", "other")) == nlj
 
 
 def test_add_terms_writes_every_term(examples, no_symmetry, tmp_path):
-    bds, angs, stiff, imps, flex, LJs, excls, rings, eq = si.list_intcoords(str(examples / "BTBT.xyz"))
-    top = add_terms(str(examples / "BTBT.top"), bds, angs, stiff, imps, flex, LJs, excls,
+    bds, angs, stiff, imps, flex, LJs, excls, rings, eq = si.list_intcoords(str(examples / "BTBT" / "BTBT.xyz"))
+    top = add_terms(str(examples / "BTBT" / "BTBT.top"), bds, angs, stiff, imps, flex, LJs, excls,
                     mixing=geom_avg_mixing)
     mol = top.molecules[0]
     assert (len(mol.bonds), len(mol.angles)) == (39, 68)
@@ -74,8 +78,8 @@ def test_missing_psi4_gives_a_clear_error(monkeypatch):
 def test_make_top_cli_with_symmetry(examples, tmp_path):
     pytest.importorskip("psi4")
     out = tmp_path / "BTBT_symm.top"
-    subprocess.run([sys.executable, "-m", "SelIntCoords.make_top", "-p", str(examples / "BTBT.top"),
-                    "-m", str(examples / "BTBT.xyz"), "-o", str(out)], check=True)
+    subprocess.run([sys.executable, "-m", "SelIntCoords.make_top", "-p", str(examples / "BTBT" / "BTBT.top"),
+                    "-m", str(examples / "BTBT" / "BTBT.xyz"), "-o", str(out)], check=True)
     assert out.exists() and (tmp_path / "BTBT_symm_deps.dat").exists()
     csv = (tmp_path / "BTBT_symm.csv").read_text()
     assert '"Bonds",39,1,39' in csv and '"Flex_dihedrals",30,156,185' in csv

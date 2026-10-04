@@ -1,9 +1,10 @@
 #!/bin/bash
-# Build the symmetry-grouped topology of three cores, then make one of them
-# readable by both GROMACS and OpenMM. Needs psi4 (see ../README.md).
+# make_top on every core in this directory (needs psi4, see ../README.md),
+# then make one result readable by both GROMACS and OpenMM.
 set -e
+cd "$(dirname "$0")"
 
-make_top -p BTBT.top -m BTBT.xyz -o BTBT_symm.top
-make_top -p PN.top -m PN.xyz -o PN_symm.top
-make_top -p DNBDT.top -m DNBDT.xyz -o DNBDT_symm.top
-joyce_to_openmm -p BTBT_symm.top -o joyce_to_openmm_out
+for m in BTBT DNBDT PN DPP PNDI2OD D18 PBDTTT-O; do
+    make_top -p $m/$m.top -m $m/$m.xyz -o $m/${m}_symm.top
+done
+joyce_to_openmm -p BTBT/BTBT_symm.top -o BTBT/openmm

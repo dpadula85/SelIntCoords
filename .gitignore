@@ -9,9 +9,9 @@
 *.vmd
 *.pdf
 timer.dat
-examples/*_symm*
-examples/joyce_to_openmm_out/
+examples/*/*_symm*
+examples/*/openmm/
 __pycache__/
 .pytest_cache/
-examples/map.txt
-examples/*.renumbered.top
+examples/*/map.txt
+examples/*/*.renumbered.top

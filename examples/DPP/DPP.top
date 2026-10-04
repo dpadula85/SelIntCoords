@@ -1,0 +1,93 @@
+ [ defaults ]
+; nbfunc   comb-rule   gen-pairs  fudgeLJ  fudgeQQ
+     1       3           no         1.0       0.0
+ 
+ [ atomtypes ]
+; name     mass    charge ptype    sigma       espilon
+   STh    32.0600   0.000   A    3.55000e-01  1.04600e+00  ; OPLS_633
+   CTh    12.0110   0.000   A    3.55000e-01  2.92880e-01  ; OPLS_145
+   HTh2    1.0079   0.000   A    2.42000e-01  1.25520e-01  ; OPLS_146
+   HTh3    1.0079   0.000   A    2.42000e-01  1.25520e-01  ; OPLS_146
+   CT     12.0110   0.000   A    3.50000e-01  2.76144e-01  ; OPLS_139
+   HT      1.0079   0.000   A    2.50000e-01  1.25520e-01  ; OPLS_140
+   CPA    12.01100  0.000   A    3.75000e-01  4.39320e-01  ; OPLS_234   
+   OPA    15.99940  0.000   A    2.96000e-01  8.78640e-01  ; OPLS_236   
+   NPA    14.00670  0.000   A    3.25000e-01  7.11280e-01  ; OPLS_239   
+   CP2    12.01100  0.000   A    3.55000e-01  2.92880e-01  ; OPLS_543   
+   CP3    12.01100  0.000   A    3.55000e-01  2.92880e-01  ; OPLS_544   
+
+ [ moleculetype ]
+; Name     nrexcl
+ DPP         3
+ 
+ [ atoms ]
+; nr  type  resnr residue  atom  cgnr    charge     mass
+   1   CTh   1    DPP      CTh    1    -0.223246  12.0110  
+   2   STh   1    DPP      STh    2     0.018805  32.0600  
+   3   CTh   1    DPP      CTh    3    -0.270178  12.0110  
+   4   CTh   1    DPP      CTh    4     0.161828  12.0110  
+   5   CTh   1    DPP      CTh    5     0.023846  12.0110  
+   6   CTh   1    DPP      CTh    6    -0.211169  12.0110  
+   7   CTh   1    DPP      CTh    7    -0.118517  12.0110  
+   8   STh   1    DPP      STh    8    -0.030037  32.0600  
+   9   CP2   1    DPP      CP2    9     0.309866  12.0110  
+  10   CP3   1    DPP      CP3   10    -0.305215  12.0110  
+  11   CP3   1    DPP      CP3   11    -0.300718  12.0110  
+  12   CPA   1    DPP      CPA   12     0.524587  12.0110  
+  13   NPA   1    DPP      NPA   13    -0.267148  14.0067  
+  14   CT    1    DPP      CT    14     0.312593  12.0110  
+  15   OPA   1    DPP      OPA   15    -0.509494  15.9994  
+  16   CP2   1    DPP      CP2   16     0.310668  12.0110  
+  17   CTh   1    DPP      CTh   17    -0.120288  12.0110  
+  18   STh   1    DPP      STh   18    -0.030995  32.0600  
+  19   CTh   1    DPP      CTh   19    -0.210289  12.0110  
+  20   CTh   1    DPP      CTh   20     0.024093  12.0110  
+  21   CTh   1    DPP      CTh   21     0.163701  12.0110  
+  22   CTh   1    DPP      CTh   22    -0.270686  12.0110  
+  23   CTh   1    DPP      CTh   23    -0.224989  12.0110  
+  24   STh   1    DPP      STh   24     0.018796  32.0600  
+  25   NPA   1    DPP      NPA   25    -0.270254  14.0067  
+  26   CT    1    DPP      CT    26     0.317113  12.0110  
+  27   CPA   1    DPP      CPA   27     0.528095  12.0110  
+  28   OPA   1    DPP      OPA   28    -0.510141  15.9994  
+  29   HTh3  1    DPP      HTh3  29     0.199723   1.0079  
+  30   HTh3  1    DPP      HTh3  30     0.251750   1.0079  
+  31   HT    1    DPP      HT    31    -0.025484   1.0079  
+  32   HT    1    DPP      HT    32    -0.025484   1.0079  
+  33   HTh3  1    DPP      HTh3  33     0.251292   1.0079  
+  34   HTh3  1    DPP      HTh3  34     0.200078   1.0079  
+  35   HT    1    DPP      HT    35    -0.026531   1.0079  
+  36   HT    1    DPP      HT    36    -0.026531   1.0079  
+  37   HTh2  1    DPP      HTh2  37     0.214543   1.0079  
+  38   HTh2  1    DPP      HTh2  38     0.213764   1.0079  
+  39   CT    1    DPP      CT    39    -0.111952  12.0110  
+  40   HT    1    DPP      HT    40     0.026175   1.0079  
+  41   HT    1    DPP      HT    41     0.026175   1.0079  
+  42   HT    1    DPP      HT    42     0.026175   1.0079  
+  43   CT    1    DPP      CT    43    -0.114565  12.0110  
+  44   HT    1    DPP      HT    44     0.026748   1.0079  
+  45   HT    1    DPP      HT    45     0.026748   1.0079  
+  46   HT    1    DPP      HT    46     0.026748   1.0079  
+
+; Strtchings
+[ bonds ]
+
+
+; Bendings
+[ angles ]
+; ring A
+
+
+; Torsions
+[ dihedrals ]
+; harmonic dihedrals
+; aromatic ring skeleton A
+
+
+ [ system ]
+; Name
+ DPP
+ 
+ [ molecules ]
+; Compound      #mols
+  DPP             1
