@@ -47,10 +47,9 @@ those of their final Joyce topology.
 | D18 | 97 | 167 | 84 | 80 | 36 |
 | PBDTTT-O | 69 | 118 | 54 | 60 | 25 |
 
-The flexible dihedrals are the full set of rotatable-bond torsions. The
-final Joyce topologies of `D18` (81) and `PBDTTT-O` (67) hold a different
-number, because Joyce's own steps select and edit them; for `DPP` the
-topology Joyce finished with has the same 38.
+`make_top` gives a starting topology that is meant to be edited. The
+flexible dihedrals are where the Joyce topologies of `D18` (81) and
+`PBDTTT-O` (67) were edited by hand; `DPP` kept the generated 38.
 
 ## Things to be careful of
 
