@@ -90,13 +90,6 @@ oligomers/polymers.
   shortest candidate at each atom below 0.92 x covalent radii sum. Double bond
   with an atom in a ring (exocyclic, ZR1/Y6) -> all its dihedrals join the stiff
   ones; others keep null parameters under `flexible (merge or by hand)`.
-  **Pair rule is open** (findings: `QMD-FFs_perception_check/pairs_analysis/PAIRS_FINDINGS.md`; it matches ZR1 but not syed/trans, type closure is not a general convention in his topologies; do not extend it before he says).
-  `pair_selection.py`: of the 1,5-1,n LJ pairs only those with a rotor on their
-  path and `r_min/sigma < --pair-ratio` (0.8; rotation of one side of each
-  scanned/phi/other rotor in 10 degree steps, rigid, rest frozen) are written; the
-  rest are commented right after the pairs written (no blank line, 1,n order, ratio in the comment); 1,4 pairs never
-  (the dihedral covers them). On ZR1 the 8 hand-chosen pairs (S...S, S...H) are
-  all found among 40. `.csv` LJ rows count the pairs written.
   `make_top.find_deps` groups coordinates by the class of each atom when the
   equivalences partition the atoms (same result as substituting every atom by
   its equivalents, which was 60**4 per dihedral for C60; falls back to that

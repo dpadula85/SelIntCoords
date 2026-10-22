@@ -105,24 +105,6 @@ rings that share a bond; the hydrogens of a ring stay with it. The groups are:
 The coordinates are renumbered in this order *before* the dependencies are
 computed, so `_deps.dat` and the `.csv` refer to the order of the file.
 
-### Which pairs are written
-
-Every pair of atoms is excluded from the non-bonded interaction, as in your
-topologies, and `make_top` writes as `[ pairs ]` only the 1-n pairs that matter.
-A pair matters when it is 1,5 or farther apart and a rotatable bond (`delta`,
-`phi` or an unclassified rotor; not methyl or ring torsions) lies between the two atoms:
-the rest of the pairs have a distance fixed by the bonds, angles and stiff
-dihedrals. The part of the molecule on one side of the rotor is turned through
-360 degrees in 10 degree steps and the closest approach `r_min` of the pair is
-kept; the pair is written when `r_min / sigma` of the pair (mixing rule of `-l`) is below
-`--pair-ratio` (default 0.8). The pairs left out are listed at the end of the
-`[ pairs ]` section, right after the pairs written and with no blank line between
-them, commented out and in the 1,n order of the lists, each with its separation
-and ratio, so you uncomment what you need.
-
-For ZR1, 40 of the 6830 pairs are written, among them the eight S...S and S...H
-contacts of your hand-made topology; the `.csv` counts only the pairs written.
-
 ### Rotatable bonds
 
 The dihedrals about a bond that is not in a ring are treated as you would by

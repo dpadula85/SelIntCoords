@@ -25,7 +25,6 @@ from .mol_features import Features
 from .flex_classes import classify_flex
 from .ring_groups import RingGrouper, insert_headers
 from .symmetry import topological_classes
-from .pair_selection import append_commented_pairs, format_commented_pair, pair_ratios
 from .dihed_deps import (
         get_ring_stiff_dihedral_equivalencies,
         integrate_ring_dihedral_equivalencies,
@@ -119,17 +118,6 @@ def options():
             default='geom',
             choices = [ 'avg', 'geom' ],
             help='''LJ mixing rule to use.'''
-        )
-
-    parser.add_argument(
-            '--pair-ratio',
-            type=float,
-            default=0.8,
-            dest='PairRatio',
-            help='''A 1-n pair is written to the topology when it is separated by a
-                    rotatable bond and, along the rotation, comes closer than this
-                    fraction of its Lennard-Jones sigma; every other pair is
-                    listed commented out at the end of the [ pairs ] section.'''
         )
 
     add_perception_args(parser)
@@ -229,9 +217,7 @@ def add_terms(
         LJs=None,
         excls=None,
         mixing=geom_avg_mixing,
-        flex_params=None,
-        pair_selection=None,
-        pair_ratio=0.8
+        flex_params=None
     ):
     '''
     Append bonded terms and 1-n Lennard-Jones pairs, all with zero
@@ -254,15 +240,6 @@ def add_terms(
     flex_params: list of dict.
         `{'delta': , 'kchi': , 'n': }` of each flexible dihedral; null
         parameters with `n = 3` when omitted.
-    pair_selection: tuple, optional.
-        `(graph, coords, rotors)`: bond graph, coordinates (Angstrom) and
-        rotatable bonds. When given, only the pairs separated by a rotor whose
-        closest approach is below `pair_ratio` times their sigma are added
-        (`pair_selection.pair_ratios`); the others are kept in
-        `topobj.commented_pairs` for `append_commented_pairs`. When omitted,
-        every pair is added.
-    pair_ratio: float.
-        Largest `r_min / sigma` of a pair that is kept.
 
     Returns
     -------
@@ -350,49 +327,35 @@ def add_terms(
         topobj.molecules[0].dihedrals.append(dih)
         counter += 1
 
-    # Add LJs. Only the pairs whose distance changes with a torsion and that
-    # come close along it are kept; the others are listed, commented out, at
-    # the end of the [ pairs ] section
-    pairs = []
+    # Add LJs
     for k, v in LJs.items():
         for pair in v:
             ai, aj = pair
-            eij, sij = mixing(nb_params[ai]['epsilon'], nb_params[aj]['epsilon'],
-                              nb_params[ai]['sigma'], nb_params[aj]['sigma'])
-            pairs.append((k, int(ai), int(aj), eij, sij))
+            ei = nb_params[ai]['epsilon']
+            si = nb_params[ai]['sigma']
 
-    ratios = {}
-    if pair_selection is not None:
-        graph, coords, rotors = pair_selection
-        sigma = { (min(ai, aj), max(ai, aj)) : sij for k, ai, aj, eij, sij in pairs }
-        ratios = pair_ratios(graph, coords, rotors, LJs, sigma)
+            ej = nb_params[aj]['epsilon']
+            sj = nb_params[aj]['sigma']
 
-    topobj.pair_counts = { k : 0 for k in LJs }
-    topobj.commented_pairs = []
-    for k, ai, aj, eij, sij in pairs:
-        ratio = ratios.get((min(ai, aj), max(ai, aj)))
-        if pair_selection is not None and (ratio is None or ratio >= pair_ratio):
-            topobj.commented_pairs.append((ratio, ai, aj, eij, sij, k))
-            continue
+            eij, sij = mixing(ei, ej, si, sj)
 
-        nb = blocks.InteractionType('gromacs')
-        nb.atom1 = topobj.molecules[0].atoms[ai]
-        nb.atom2 = topobj.molecules[0].atoms[aj]
-        nb.gromacs = {
-                'param': {
-                    'lje': None,
-                    'ljl':None,
-                    'lje14': eij,
-                    'ljl14': sij,
-                    'QQ': 1.000,
-                    'qi': 0.000,
-                    'qj': 0.000
-                    },
-                'func': 2
-            }
-        topobj.molecules[0].pairs.append(nb)
-        topobj.pair_counts[k] += 1
-        counter += 1
+            nb = blocks.InteractionType('gromacs')
+            nb.atom1 = topobj.molecules[0].atoms[ai]
+            nb.atom2 = topobj.molecules[0].atoms[aj]
+            nb.gromacs = {
+                    'param': {
+                        'lje': None,
+                        'ljl':None,
+                        'lje14': eij,
+                        'ljl14': sij,
+                        'QQ': 1.000,
+                        'qi': 0.000,
+                        'qj': 0.000
+                        },
+                    'func': 2
+                    }
+            topobj.molecules[0].pairs.append(nb)
+            counter += 1
 
     # Add exclusions
     for excl in excls:
@@ -586,9 +549,7 @@ def main():
             LJs,
             excls,
             mixing=Opts["MixingRule"],
-            flex_params=plan.params,
-            pair_selection=(feats.graph, feats.pos, plan.rotors),
-            pair_ratio=Opts['PairRatio']
+            flex_params=plan.params
         )
 
     if tmpdir is not None:
@@ -597,12 +558,6 @@ def main():
     # Write topology (unchanged)
     topobj.write(outfile)
     insert_headers(outfile, headers)
-    commented = topobj.commented_pairs
-    reason = [
-            '; kept: 1,5 or farther apart, with a rotatable bond between the two atoms, and closer than',
-            '; %.2f sigma of the pair at the closest approach along that rotation (--pair-ratio); the others are commented below' % Opts['PairRatio']
-        ]
-    append_commented_pairs(outfile, [ format_commented_pair(ai, aj, eij, sij, ratio, k) for ratio, ai, aj, eij, sij, k in commented ], reason)
     if type_comments:
         add_atomtype_comments(outfile, type_comments)
     missing = {a.element for a in assign if a.source == 'placeholder'}
@@ -630,11 +585,11 @@ def main():
                 stiff.shape[0],
                 impdiheds.shape[0],
                 flex.shape[0],
-                topobj.pair_counts['1,4'],
-                topobj.pair_counts['1,5'],
-                topobj.pair_counts['1,6'],
-                topobj.pair_counts['1,7'],
-                topobj.pair_counts['other'],
+                LJs['1,4'].shape[0],
+                LJs['1,5'].shape[0],
+                LJs['1,6'].shape[0],
+                LJs['1,7'].shape[0],
+                LJs['other'].shape[0],
             ]
         })
 

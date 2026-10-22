@@ -33,10 +33,10 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence
 
+import networkx as nx
 import numpy as np
 
 from .mol_features import Features
-from .pair_selection import rotor_sides
 
 log = logging.getLogger(__name__)
 
@@ -82,10 +82,6 @@ class FlexPlan:
         Parameters of each flexible dihedral (funct 1).
     counts: dict.
         Number of dihedrals by kind.
-    rotors: list of (int, int).
-        Rotatable bonds whose rotation moves atoms relative to each other:
-        the single and double bonds that are scanned and the others left
-        for the user (methyl and ring torsions are not).
     '''
 
     double: np.ndarray
@@ -93,7 +89,6 @@ class FlexPlan:
     labels: List[str] = field(default_factory=list)
     params: List[dict] = field(default_factory=list)
     counts: Dict[str, int] = field(default_factory=dict)
-    rotors: List[tuple] = field(default_factory=list)
 
 
 def double_bonds(f: Features) -> set:
@@ -156,6 +151,20 @@ def _methyl_ends(f: Features, m: int, a: int) -> List[int]:
         return others
     heavy = [x for x in others if f.el[x] != 'H']
     return heavy[:1] if heavy else others[:1]
+
+
+def rotor_sides(graph, bond):
+    '''Atoms on each side of a bond, as boolean masks over the atoms.'''
+
+    j, k = bond
+    cut = graph.copy()
+    cut.remove_edge(j, k)
+    sides = []
+    for end in (j, k):
+        mask = np.zeros(graph.number_of_nodes(), dtype=bool)
+        mask[list(nx.node_connected_component(cut, end))] = True
+        sides.append(mask)
+    return sides
 
 
 def _rigid_atom(f: Features, i: int) -> bool:
@@ -263,7 +272,6 @@ def classify_flex(f: Features, flex: np.ndarray, eq: Optional[Dict[int, np.ndarr
             flex=np.asarray(rows, dtype=int).reshape(-1, 4),
             labels=labels,
             params=params,
-            rotors=sorted({tuple(sorted((int(d[1]), int(d[2])))) for d in scans + phis + others}),
             counts={'methyl': len(methyls), 'ring': len(rings), 'scan': len(scans), 'phi': len(phis),
                     'double': len(double), 'other': len(others)}
         )
