@@ -23,8 +23,8 @@ jobs:
           repository: dpadula85/chain_cropper
           path: chain_cropper
 
-      # The tests that need the GROMACS topology database (atom type perception)
-      # skip themselves when it is not installed.
+      # The OPLS-AA files for atom type perception are shipped with the package;
+      # the one test that reads another force field skips itself without GROMACS.
       - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip

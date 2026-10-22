@@ -11,6 +11,7 @@ setup(
     description="A python package to select internal coordinates for FF fitting",
     url="https://github.com/dpadula85/selintcoords",
     packages=setuptools.find_packages(exclude=["tests", "examples"]),
+    package_data={"SelIntCoords": ["data/top/*.md", "data/top/*/*"]},
     python_requires=">=3.10",
     install_requires=[
         "chain-cropper",

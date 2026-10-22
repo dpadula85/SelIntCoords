@@ -12,7 +12,7 @@ provides standalone atom-mapping/renumbering utilities to reconcile
 different atom numbering schemes between two structures of the same
 molecule (e.g. an experimental crystal geometry vs. a force-field
 geometry). Targets rigid/(semi-)planar organic-semiconductor cores with
-optional flexible side chains (examples: BTBT, DNBDT, pentacene; `examples/` has the inputs, `tests/` the pytest suite, CI skips the tests that need the GROMACS database).
+optional flexible side chains (examples: BTBT, DNBDT, pentacene; `examples/` has the inputs, `tests/` the pytest suite, the OPLS-AA files for perception ship in `SelIntCoords/data/top`).
 
 ## Role in the pipeline
 
@@ -41,8 +41,10 @@ oligomers/polymers.
   `perceive_types -m geometry.xyz [-o out.top] [--ff oplsaa] [--gmx-top DIR] [--ff-type-names]`
   is the same perception alone: force-field atom types from a bare geometry,
   written as the minimal `.top` plus a `<stem>_types.types` report. Types, masses and LJ parameters
-  come from a GROMACS `share/gromacs/top/<ff>.ff` (`ffdb.py`; found via
-  `--gmx-top`, `$GMXLIB`, `$GMXDATA/top`, or the `gmx` executable). Atoms are
+  come from the OPLS-AA files shipped in `SelIntCoords/data/top/oplsaa.ff` (4 files copied
+  unchanged from GROMACS 2020, LGPL-2.1, references in its README; `ffdb.py`), or for
+  another force field from a GROMACS `<ff>.ff` (`--gmx-top`, `$GMXLIB`, `$GMXDATA/top`,
+  or the `gmx` executable). Atoms are
   classified by `mol_features.py` (bond graph + geometry only: hybridisation
   from angle sums, aromatic = planar 5/6-ring with Hueckel count and no
   carbonyl C; no bond orders, no RDKit: generic bond-order assignment

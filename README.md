@@ -36,17 +36,17 @@ git clone https://github.com/dpadula85/SelIntCoords.git
 pip install -e SelIntCoords
 ```
 
-`make_top -m` needs a GROMACS installation for the force-field database
-(see [Atom type perception](#atom-type-perception)); nothing else is needed
-beyond `pip`. `openmm_compat` needs `openmm` (`pip install openmm`).
+Nothing else is needed beyond `pip`: the OPLS-AA files for
+[atom type perception](#atom-type-perception) are shipped with the package
+(GROMACS is only needed to perceive types with another force field). `openmm_compat` needs `openmm` (`pip install openmm`).
 
 ## Which tool do I need?
 
 | I want to... | Tool | Needs |
 |---|---|---|
-| Get the topology and `$dependence` file Joyce starts from, from the `.xyz` alone | `make_top -m geometry.xyz` | GROMACS database |
+| Get the topology and `$dependence` file Joyce starts from, from the `.xyz` alone | `make_top -m geometry.xyz` | - |
 | The same, with atom types you wrote or edited yourself | `make_top -p initial.top -m geometry.xyz` | - |
-| Only look at the atom types a geometry gets (no bonded terms) | `perceive_types` | GROMACS database |
+| Only look at the atom types a geometry gets (no bonded terms) | `perceive_types` | - |
 | Make atom numbering follow another structure (e.g. crystal) | `map_atoms`, then `renumber_top` | - |
 | Make a Joyce `.top` readable by both GROMACS and OpenMM | `joyce_to_openmm` | - |
 | Get OpenMM energies equal to GROMACS ones | `openmm_compat.load_top` | openmm |
@@ -133,10 +133,12 @@ bonds of a conjugated chain alternating.
 `make_top` needs the **atom type** of each atom: the label that tells a
 force field which Lennard-Jones parameters (and mass) to use, for example
 "aromatic carbon" or "thiophene sulfur". It reads the types from the
-geometry, so no starting `.top` has to be written, using the force fields
-shipped with GROMACS
-(`share/gromacs/top/<name>.ff`: mass and Lennard-Jones parameters per type,
-and the residue templates of the force field).
+geometry, so no starting `.top` has to be written, using the OPLS-AA force
+field (mass and Lennard-Jones parameters per type, and the residue templates
+of the force field). Its files are shipped with the package, copied unchanged
+from GROMACS 2020 ([`SelIntCoords/data/top`](SelIntCoords/data/top/README.md),
+with the licence and references); any other force field of the GROMACS
+database is read from a GROMACS installation.
 
 Bonds are guessed as in `make_top`, then each atom is classified from its
 neighbours, its hybridisation (from the bond angles) and its rings (aromatic
@@ -160,9 +162,9 @@ make_top -m BTBT.xyz [--ff oplsaa] [--gmx-top DIR] [--ff-type-names] [--resname 
 perceive_types -m BTBT.xyz [-o BTBT_types.top]    # only the starting topology and the report
 ```
 
-`--ff` is the force field (default `oplsaa`). `--gmx-top` points at the
-GROMACS `top` directory; by default `$GMXLIB`, `$GMXDATA/top`, or the one next to
-the `gmx` executable is used. Atomtypes are named by local environment (`CA1`, `CA2` for aromatic carbons bonded to
+`--ff` is the force field (default `oplsaa`). `--gmx-top` points at a directory with
+the `<name>.ff` folders; by default the shipped OPLS-AA files, and for another
+force field `$GMXLIB`, `$GMXDATA/top`, or the one next to the `gmx` executable. Atomtypes are named by local environment (`CA1`, `CA2` for aromatic carbons bonded to
 different neighbours, `HC`, `S`...) and atoms by element and number (`S1`, `C2`);
 the force-field type stays in the comment of each atomtype line. `--ff-type-names`
 names the atomtypes by force-field type (`opls_145`) instead. `perceive_types` is the same
@@ -387,5 +389,5 @@ pytest tests/
 The suite covers term counts for the example cores, atom type perception, the
 symmetry detection, ring grouping and rotor classes, atom mapping and
 renumbering (including the refusals), the converter, and the OpenMM
-energies; the tests that need the GROMACS topology database skip themselves
-without it, as on CI.
+energies; the one test that reads a GROMOS force field needs a GROMACS
+installation and skips itself without it, as on CI.

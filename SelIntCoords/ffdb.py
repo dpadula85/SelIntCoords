@@ -17,7 +17,7 @@ import shutil
 import logging
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 log = logging.getLogger(__name__)
 
@@ -58,15 +58,24 @@ class Residue:
     source: str = ''
 
 
-def find_gmx_top(gmx_top=None) -> Path:
+# force fields shipped with the package (see data/top/README.md)
+BUNDLED_TOP = Path(__file__).resolve().parent / 'data' / 'top'
+
+
+def find_gmx_top(gmx_top=None, ff_name: Optional[str] = None) -> Path:
     '''
-    Locate the GROMACS `share/gromacs/top` directory.
+    Locate the directory that holds the `<name>.ff` force-field folders.
 
     Parameters
     ----------
     gmx_top: str or Path, optional.
-        Explicit directory. If None, `$GMXLIB`, then `$GMXDATA/top`, then
-        the `share/gromacs/top` next to the `gmx` executable are tried.
+        Explicit directory. If None, the force fields shipped with the
+        package are used when they include `ff_name`; otherwise `$GMXLIB`,
+        then `$GMXDATA/top`, then the `share/gromacs/top` next to the `gmx`
+        executable are tried.
+    ff_name: str, optional.
+        Force field wanted (`oplsaa`); only directories that contain it are
+        accepted.
 
     Returns
     -------
@@ -74,10 +83,13 @@ def find_gmx_top(gmx_top=None) -> Path:
         The directory.
     '''
 
+    name = None if ff_name is None else (ff_name[:-3] if ff_name.endswith('.ff') else ff_name)
+
     cands = []
     if gmx_top is not None:
         cands.append(Path(gmx_top))
     else:
+        cands.append(BUNDLED_TOP)
         if os.environ.get('GMXLIB'):
             cands.append(Path(os.environ['GMXLIB']))
         if os.environ.get('GMXDATA'):
@@ -88,12 +100,17 @@ def find_gmx_top(gmx_top=None) -> Path:
                 cands.append(Path(path).resolve().parent.parent / 'share' / 'gromacs' / 'top')
 
     for cand in cands:
-        if cand.is_dir():
+        if not cand.is_dir():
+            continue
+        # an explicit directory is returned as it is, so that a missing force
+        # field is reported with the list of those it has
+        if gmx_top is not None or name is None or (cand / (name + '.ff')).is_dir():
             return cand
 
     raise FileNotFoundError(
-        'GROMACS topology database not found (tried: %s); pass it explicitly '
-        '(--gmx-top) or set $GMXLIB' % ', '.join(map(str, cands)))
+        'no topology database with %s found (tried: %s); pass the GROMACS '
+        'share/gromacs/top directory (--gmx-top) or set $GMXLIB'
+        % ('force field %r' % name if name else 'a force field', ', '.join(map(str, cands))))
 
 
 def _strip(line: str) -> str:
@@ -129,7 +146,8 @@ class ForceField:
     name: str.
         Directory name with or without the `.ff` suffix (e.g. `oplsaa`).
     gmx_top: str or Path, optional.
-        GROMACS `top` directory (see `find_gmx_top`).
+        Directory with the `.ff` folders (see `find_gmx_top`); the OPLS-AA
+        files shipped with the package by default.
 
     Attributes
     ----------
@@ -143,8 +161,8 @@ class ForceField:
     '''
 
     def __init__(self, name: str, gmx_top=None):
-        self.top = find_gmx_top(gmx_top)
         self.name = name[:-3] if name.endswith('.ff') else name
+        self.top = find_gmx_top(gmx_top, self.name)
         self.path = self.top / (self.name + '.ff')
         if not self.path.is_dir():
             avail = sorted(p.name[:-3] for p in self.top.glob('*.ff'))

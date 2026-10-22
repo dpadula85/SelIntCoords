@@ -24,10 +24,8 @@ NAMES = ["BTBT", "DNBDT", "PN", "DPP", "PNDI2OD", "D18", "PBDTTT-O"]
 
 @pytest.fixture(scope="module")
 def gmx_top():
-    try:
-        return find_gmx_top()
-    except FileNotFoundError:
-        pytest.skip("GROMACS topology database not found")
+    """The OPLS-AA files shipped with the package."""
+    return find_gmx_top()
 
 
 @pytest.fixture(scope="module")
@@ -73,9 +71,13 @@ def test_ffdb_oplsaa_parameters(oplsaa):
     assert len(oplsaa.residues) > 40
 
 
-def test_ffdb_gromos_c6_c12_converted(gmx_top):
+def test_ffdb_gromos_c6_c12_converted():
     """Combination rule 1 stores C6, C12: sigma/epsilon must come out in nm and kJ/mol."""
-    ff = ForceField("gromos54a7", gmx_top)
+    try:
+        top = find_gmx_top(None, "gromos54a7")
+    except FileNotFoundError:
+        pytest.skip("GROMACS topology database not found")
+    ff = ForceField("gromos54a7", top)
     assert ff.comb_rule == 1
     t = ff.atomtypes["OA"]  # hydroxyl oxygen: sigma ~ 0.30 nm, epsilon ~ 0.8 kJ/mol
     assert 0.25 < t.sigma < 0.35
@@ -485,3 +487,12 @@ def test_default_names_are_classes_and_element_numbers(examples, gmx_top, tmp_pa
     assert [r[4] for r in rows][:3] == ["S1", "C2", "C3"] and len({r[4] for r in rows}) == 36
     assert all(r[1] != r[4] for r in rows)
     assert "; opls_145" in text.split("[ atomtypes ]")[1].split("[ moleculetype ]")[0]
+
+
+def test_oplsaa_files_are_shipped_with_the_package_and_found_by_default():
+    from SelIntCoords.ffdb import BUNDLED_TOP
+    assert find_gmx_top(None, "oplsaa") == BUNDLED_TOP
+    ff = ForceField("oplsaa")
+    assert ff.top == BUNDLED_TOP and ff.atomtypes["opls_145"].sigma == pytest.approx(0.355)
+    with pytest.raises(FileNotFoundError, match="nosuchff"):
+        find_gmx_top(None, "nosuchff")

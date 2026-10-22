@@ -301,7 +301,7 @@ def perceive_to_top(xyz, ff_name: str = 'oplsaa', gmx_top=None, out=None,
     ff_name: str.
         Force field, e.g. `oplsaa` (`<name>.ff` in the GROMACS database).
     gmx_top: str or Path, optional.
-        GROMACS `top` directory (see `ffdb.find_gmx_top`).
+        Directory with the `.ff` folders (see `ffdb.find_gmx_top`).
     out: str or Path, optional.
         Output `.top`; `<xyz stem>_types.top` by default. The report goes next
         to it, with the extension `.types`.
@@ -405,8 +405,9 @@ def add_perception_args(parser):
     grp.add_argument('--ff', default='oplsaa',
                      help='Force field of the GROMACS database (default: oplsaa).')
     grp.add_argument('--gmx-top', default=None,
-                     help='GROMACS share/gromacs/top directory (default: $GMXLIB, $GMXDATA/top, '
-                          'or next to the gmx executable).')
+                     help='Directory with the <ff>.ff folders (default: the OPLS-AA files shipped with the '
+                          'package; for another force field $GMXLIB, $GMXDATA/top, or next to the '
+                          'gmx executable).')
     grp.add_argument('--ff-type-names', action='store_true',
                      help='Name atomtypes by force-field type (opls_145) instead of by local '
                           'environment (CA1, CA2, ...); the type is in the comment either way.')
