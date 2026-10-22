@@ -23,8 +23,8 @@ jobs:
           repository: dpadula85/chain_cropper
           path: chain_cropper
 
-      # psi4 (point-group detection in make_top) is conda-only and is not
-      # installed here: the tests that need it skip themselves.
+      # The tests that need the GROMACS topology database (atom type perception)
+      # skip themselves when it is not installed.
       - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip

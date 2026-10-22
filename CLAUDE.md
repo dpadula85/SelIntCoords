@@ -12,7 +12,7 @@ provides standalone atom-mapping/renumbering utilities to reconcile
 different atom numbering schemes between two structures of the same
 molecule (e.g. an experimental crystal geometry vs. a force-field
 geometry). Targets rigid/(semi-)planar organic-semiconductor cores with
-optional flexible side chains (examples: BTBT, DNBDT, pentacene; `examples/` has the inputs, `tests/` the pytest suite, CI skips the psi4 test).
+optional flexible side chains (examples: BTBT, DNBDT, pentacene; `examples/` has the inputs, `tests/` the pytest suite, CI skips the tests that need the GROMACS database).
 
 ## Role in the pipeline
 
@@ -29,11 +29,80 @@ oligomers/polymers.
   no bonded terms) + an `.xyz` with matching atom order; guesses bonds via
   MDAnalysis, builds a NetworkX connectivity graph, enumerates
   bonds/angles/proper(stiff+flexible)/improper dihedrals/LJ 1,4-1,7+pairs/
-  exclusions, detects point group (psi4) and local/ring symmetry
+  exclusions, detects the symmetry-equivalent atoms (`symmetry.py`: operations
+  mapping the geometry onto itself within 0.01 A, orbits of their group; no psi4/pyscf) and local/ring symmetry
   equivalence (`dihed_deps.py`). Writes: the completed `.top`, a
   `<stem>_deps.dat` (Joyce `$dependence 1.2` format), and a
   `<stem>.csv` coordinate-count summary (columns: `Type, Number, Start,
   End`).
+- `make_top -m geometry.xyz` (no `-p`; writes `<stem>.top`, class-named atomtypes like CA1/HC, atoms named element+number, the opls type in a comment; `--ff-type-names` keeps opls_NNN) perceives the atom types inside
+  (`perceive_to_top` into a temp dir, deleted) and keeps only the report
+  `<out stem>.types` next to the outputs; with `-p` nothing is perceived.
+  `perceive_types -m geometry.xyz [-o out.top] [--ff oplsaa] [--gmx-top DIR] [--ff-type-names]`
+  is the same perception alone: force-field atom types from a bare geometry,
+  written as the minimal `.top` plus a `<stem>_types.types` report. Types, masses and LJ parameters
+  come from a GROMACS `share/gromacs/top/<ff>.ff` (`ffdb.py`; found via
+  `--gmx-top`, `$GMXLIB`, `$GMXDATA/top`, or the `gmx` executable). Atoms are
+  classified by `mol_features.py` (bond graph + geometry only: hybridisation
+  from angle sums, aromatic = planar 5/6-ring with Hueckel count and no
+  carbonyl C; no bond orders, no RDKit: generic bond-order assignment
+  mistypes thiophene S in DPP/PNDI2OD). Engine 1: curated OPLS-AA rules
+  (`oplsaa_rules.py`, ordered, first match wins; `analogue=True` rules borrow
+  thiazole S opls_633 / benzene C opls_145 / imidazole N opls_557 /
+  pyrrole C2,C3 opls_543,544 and azo N (opls_520, pyridine N) as the examples do, and four conjugated-carbon
+  rules typing ring-ketone C between two conjugated C, alkene C without H with
+  two conjugated C neighbours, pyramidalised cage sp2 C, and quaternary sp3 C
+  between two conjugated C as opls_145, as in PM6/IDIC/Y6/PCBM; `REFUSE` lists
+  charged environments). Engine 2: `learned_types.py`, Morgan-label table (radius
+  <= 3) from the `.rtp` residues, back-off to smaller radius, radius 0 never
+  used; fallback for uncovered atoms and cross-check (LJ-class disagreement
+  at radius >= 2 is reported). Untyped atom = `ValueError`. Charges are 0.
+  Validation: LJ+mass equal to the hand-assigned types for 360/362 example
+  atoms (the 2 misses: PBDTTT-O furan O, hand epsilon 0.5876 vs opls_566
+  0.58576), 11070/11074 OPLS-valued atoms of QMD-FFs (74 molecule types; misses:
+  NAP fusion C, ETD hydroxyl, hand-typed with other values; refitted-LJ
+  molecules are not comparable), 726/726 of the walter BHJ polymers; perceived
+  types give identical bonded terms for BTBT, DPP, PNDI2OD; learned engine
+  leave-residue-out same-LJ-class 93% (OPLS-AA). Rhodanine rule (ring C all
+  opls_145, ring S and thione S opls_633, N opls_239). `extra_types.py`: Se and
+  Si from the literature (his PBDTTT-Se / TIPS_PN notes, with DOIs); any other
+  element without parameters gets a placeholder atomtype whose sigma/epsilon
+  are `FILL_ME` in the final topology (`mark_missing_parameters`), plus
+  `<stem>_types.top` to fill and re-run with `-p`.
+  Other force fields: learned engine only, unvalidated; neutral molecules only.
+- `make_top` output organisation, as in his hand-made topologies (QMD-FFs
+  `ZR1.itp`, `Y6.itp`): `ring_groups.py` groups bonds, angles and stiff
+  dihedrals by fused ring system under `; <ring name>` headers (headers are
+  inserted into the written text by the trailing `; <global index>`
+  comments; the arrays are reordered before the dependencies are computed,
+  so `_deps.dat` follows the order of the file). Link chains between two
+  systems form `A to B`; methyl involvement gives `methyls`; impropers are
+  `starlike`. `flex_classes.py` sorts rotors: methyl (on C/N/O/S/Se) and sp3 ring-bond
+  dihedrals -> funct 1 `k = 0.651, n = 3, delta = 0` (= GAFF X-c3-c3-X 0.1556
+  kcal/mol, Wang 2004 doi:10.1002/jcc.20035; his retinal paper takes ring
+  torsions from GAFF; ZR1/Y6/ISOTIPS_PN/retinal files carry it; older D18/PBDTTT-O
+  files have Joyce-fitted 4.128/5.381, not used); on an sp3 C all neighbours
+  of a methyl are kept, on sp2/N/O/S one heavy neighbour. Single bond between
+  two rigid units (rings, sp2, azo N) directly or through sp3 linker atoms (ether, ethylene) -> `delta<N>`; double bond with no ring atom -> `phi<N>`; a side chain whose far end has no ring or sp2 atom stays unclassified
+  (retinal chain), each one dihedral (sp2 carbons preferred), `n = 2`
+  placeholder as in his Step1 files, header shared by atoms of the same
+  connectivity class (`symmetry.topological_classes`). Double bonds =
+  shortest candidate at each atom below 0.92 x covalent radii sum. Double bond
+  with an atom in a ring (exocyclic, ZR1/Y6) -> all its dihedrals join the stiff
+  ones; others keep null parameters under `flexible (merge or by hand)`.
+  **Pair rule is open** (findings: `QMD-FFs_perception_check/pairs_analysis/PAIRS_FINDINGS.md`; it matches ZR1 but not syed/trans, type closure is not a general convention in his topologies; do not extend it before he says).
+  `pair_selection.py`: of the 1,5-1,n LJ pairs only those with a rotor on their
+  path and `r_min/sigma < --pair-ratio` (0.8; rotation of one side of each
+  scanned/phi/other rotor in 10 degree steps, rigid, rest frozen) are written; the
+  rest are commented right after the pairs written (no blank line, 1,n order, ratio in the comment); 1,4 pairs never
+  (the dihedral covers them). On ZR1 the 8 hand-chosen pairs (S...S, S...H) are
+  all found among 40. `.csv` LJ rows count the pairs written.
+  `make_top.find_deps` groups coordinates by the class of each atom when the
+  equivalences partition the atoms (same result as substituting every atom by
+  its equivalents, which was 60**4 per dihedral for C60; falls back to that
+  loop otherwise). Checked against ZR1 (bonds, angles identical to his Step1; the four `delta`
+  dihedrals and the exocyclic C=C stiff ones equal his) and the 11-cis retinal PSB
+  (his delta1-5 and phi1-5 quadruplets, tests/data).
 - `map_atoms -r reference.xyz -t target.xyz [-m map.txt] [-o reordered.xyz] [-v]`
   — graph-isomorphism + Kabsch-RMSD atom correspondence between two XYZ
   structures of the same molecule with different atom orderings.
@@ -86,7 +155,7 @@ oligomers/polymers.
   junction bug this fixes can only arise after `oligomer_builder` merges
   two fragments this package never sees combined. Needs `openmm`
   (`pip install openmm`), not in `requirements.txt` — the only module
-  here that uses it, documented the same way `psi4` already is.
+  here that uses it.
   `load_top(top, gro=None, nonbonded_method=app.NoCutoff)` is the
   vacuum path (GROMACS `pbc = no`, infinite cut-offs): no `.gro`/box
   needed. The dispersion flag is applied to every `NonbondedForce` and
@@ -101,8 +170,8 @@ oligomers/polymers.
 
 ## Input format
 
-`make_top`: a minimal `.top` (atom types/atoms block only) + `.xyz`
-geometry, atom order and count must match exactly.
+`make_top`: a minimal `.top` (atom types/atoms block only; optional, see
+`perceive_types`) + `.xyz` geometry, atom order and count must match exactly.
 `map_atoms`/`renumber_top`: plain `.xyz` files; the map file is
 whitespace `reference target` integer pairs, one per line, `#`-comments
 and blank lines skipped.
@@ -148,29 +217,19 @@ a `Fragment`.
   (~130 lines), fully superseded by `main()` (which adds ring-dihedral
   dependency handling) — deleted; the `make_top` console-script entry
   point already pointed at `main`, not `old_main`.
-- **Investigated, deliberately left as-is:** `sel_intcoords.py`'s
-  top-of-file `try: import psi4, pyscf... except: import (same) ...
-  finally: import (same)` (lines 11-19) looks like a no-op (if the
-  import fails in `try` it fails identically in `except`, and `finally`
-  re-raises unconditionally anyway) — a plain single import reproduced
-  identical behavior in repeated local testing (5 runs, same import
-  order as the real file, psi4 1.9.1). **But Daniele confirmed this
-  triple import is a deliberate workaround for a real psi4 quirk seen on
-  some of his other machines, not dead code** — the quirk didn't
-  reproduce in this environment, so don't "clean this up" again without
-  actually reproducing the failure it guards against.
 - **Fixed 2026-08-06:** `list_intcoords()`'s docstring `Returns` section
   omitted `eq` (the equivalence dict), which is in fact the 9th/last
   returned value — added.
 
 ## Dependencies
 
-MDAnalysis 2.7.0, networkx 3.2.1, numpy 1.26.4, pandas 2.2.1, pyscf 2.5.0
-(`requirements.txt`); `psi4` is also required at runtime for
-`make_top`/`sel_intcoords`'s point-group detection (not needed by
-`map_atoms`/`renumber_top`, which use only MDAnalysis/networkx/numpy).
+MDAnalysis 2.7.0, networkx 3.2.1, numpy 1.26.4, pandas 2.2.1, scipy
+(`requirements.txt`). No psi4, no pyscf: the symmetry-equivalent atoms come
+from `symmetry.py` (numpy + scipy KD-tree).
+`perceive_types` needs a GROMACS `top` database on disk (no new Python
+dependency; `rdkit` only in the tests extra, for the SMILES-built cases).
 `openmm` is required only by `openmm_compat.py`, documented here rather
-than declared in `requirements.txt`, same treatment as `psi4`.
+than declared in `requirements.txt`.
 `requirements.yml` is a full conda-env snapshot, much broader than the
 actual runtime dependency set — don't treat it as the minimal spec.
 

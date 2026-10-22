@@ -106,9 +106,8 @@ by comb-rule and its charge product read from that line's own
 `fudgeQQ*qi*qj`.
 
 Needs `openmm` (`pip install openmm`) -- not in `requirements.txt`,
-matching how `psi4` (needed only by `make_top`/`sel_intcoords`) is
-already handled: documented, not declared, since this is the only
-module in the package that uses it.
+documented, not declared, since this is the only module in the package
+that uses it.
 '''
 
 import math

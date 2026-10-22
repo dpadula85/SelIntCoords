@@ -1,8 +1,7 @@
 """make_top: internal-coordinate counts for the example cores.
 
-Point-group detection needs psi4 (conda-only), so most tests replace it with
-"no symmetry"; the counts below do not depend on it. The one test that does
-is skipped when psi4 is absent.
+Most tests replace the point-group detection with "no symmetry"; the counts
+below do not depend on it.
 """
 import subprocess
 import sys
@@ -69,17 +68,53 @@ def test_find_deps_without_equivalences_is_empty():
     assert find_deps(coords, eqs).size == 0
 
 
-def test_missing_psi4_gives_a_clear_error(monkeypatch):
-    monkeypatch.setattr(si, "psi4", None)
-    with pytest.raises(ImportError, match="psi4"):
-        si.get_equivalent_atoms(None)
-
-
 def test_make_top_cli_with_symmetry(examples, tmp_path):
-    pytest.importorskip("psi4")
     out = tmp_path / "BTBT_symm.top"
     subprocess.run([sys.executable, "-m", "SelIntCoords.make_top", "-p", str(examples / "BTBT" / "BTBT.top"),
                     "-m", str(examples / "BTBT" / "BTBT.xyz"), "-o", str(out)], check=True)
     assert out.exists() and (tmp_path / "BTBT_symm_deps.dat").exists()
     csv = (tmp_path / "BTBT_symm.csv").read_text()
     assert '"Bonds",39,1,39' in csv and '"Flex_dihedrals",30,156,185' in csv
+
+
+def _brute_force_deps(coords, eqs):
+    """Pairs of coordinates linked by substituting each atom by an equivalent one."""
+    from itertools import product
+    pairs = set()
+    for c, coord in enumerate(coords):
+        for sub in product(*[eqs[i] for i in coord]):
+            for d in np.where((coords == np.asarray(sub)).all(axis=1))[0]:
+                if d != c:
+                    pairs.add((min(c, d), max(c, d)))
+    return pairs
+
+
+@pytest.mark.parametrize("name", ["BTBT", "D18"])
+def test_find_deps_equals_the_substitution_of_equivalent_atoms(name, examples):
+    from SelIntCoords.make_top import find_deps
+    data = si.list_intcoords(str(examples / name / f"{name}.xyz"))
+    eq = data[-1]
+    for coords in (data[0], data[1], data[2], data[4]):
+        coords = np.asarray(coords)
+        found = find_deps(coords, eq)
+        pairs = {tuple(p) for p in found.tolist()} if found.shape[0] > 1 else set()
+        assert pairs == _brute_force_deps(coords, eq)
+
+
+def test_find_deps_on_large_equivalence_classes_is_not_exponential():
+    """60 equivalent atoms (a fullerene): the substitution of every atom of a dihedral would be 60**4."""
+    from SelIntCoords.make_top import find_deps
+    eq = {i: np.arange(60) for i in range(60)}
+    coords = np.array([[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]])
+    found = find_deps(coords, eq)
+    assert sorted({tuple(p) for p in found.tolist()}) == [(0, 1), (0, 2), (1, 2)]
+
+
+def test_molecule_without_hydrogens_has_no_equivalent_hydrogens(tmp_path):
+    import MDAnalysis as mda
+    import networkx as nx
+    a = np.arange(6) * np.pi / 3
+    xyz = tmp_path / "c6.xyz"
+    xyz.write_text("6\n\n" + "\n".join("C %.4f %.4f 0.0" % (1.4 * np.cos(t), 1.4 * np.sin(t)) for t in a) + "\n")
+    u = mda.Universe(str(xyz), guess_bonds=True)
+    assert si.get_equivalent_hydrogens(u, nx.Graph(u.bonds.to_indices().tolist())) == {}

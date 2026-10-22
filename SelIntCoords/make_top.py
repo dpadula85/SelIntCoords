@@ -6,9 +6,12 @@ bond, angle, dihedral, improper, 1-n LJ pair and exclusion derived from a
 geometry, plus the Joyce $dependence file and a coordinate-count CSV.
 '''
 
+import os
 import sys
 import csv
+import tempfile
 import numpy as np
+import MDAnalysis as mda
 import pandas as pd
 import argparse as arg
 from itertools import product
@@ -16,6 +19,13 @@ from itertools import product
 from .top import *
 from .blocks import *
 from .sel_intcoords import list_intcoords, flip_bigger, flatten
+from .perceive_types import (add_atomtype_comments, add_perception_args, atomtype_comments,
+                             mark_missing_parameters, perceive_to_top)
+from .mol_features import Features
+from .flex_classes import classify_flex
+from .ring_groups import RingGrouper, insert_headers
+from .symmetry import topological_classes
+from .pair_selection import append_commented_pairs, format_commented_pair, pair_ratios
 from .dihed_deps import (
         get_ring_stiff_dihedral_equivalencies,
         integrate_ring_dihedral_equivalencies,
@@ -86,9 +96,10 @@ def options():
             '-p',
             '--top',
             type=str,
-            required=True,
+            default=None,
             dest='TopFile',
-            help='''Initial topology (.top format).'''
+            help='''Initial topology (.top format). If omitted, the atom types are
+                    perceived from the geometry (see the Atom type perception options).'''
         )
 
     inp.add_argument(
@@ -109,6 +120,19 @@ def options():
             choices = [ 'avg', 'geom' ],
             help='''LJ mixing rule to use.'''
         )
+
+    parser.add_argument(
+            '--pair-ratio',
+            type=float,
+            default=0.8,
+            dest='PairRatio',
+            help='''A 1-n pair is written to the topology when it is separated by a
+                    rotatable bond and, along the rotation, comes closer than this
+                    fraction of its Lennard-Jones sigma; every other pair is
+                    listed commented out at the end of the [ pairs ] section.'''
+        )
+
+    add_perception_args(parser)
 
     #
     # Outut Options
@@ -204,7 +228,10 @@ def add_terms(
         flexs=None,
         LJs=None,
         excls=None,
-        mixing=geom_avg_mixing
+        mixing=geom_avg_mixing,
+        flex_params=None,
+        pair_selection=None,
+        pair_ratio=0.8
     ):
     '''
     Append bonded terms and 1-n Lennard-Jones pairs, all with zero
@@ -224,6 +251,18 @@ def add_terms(
     mixing: callable.
         Mixing rule `f(eps_i, eps_j, sig_i, sig_j) -> (eps_ij, sig_ij)` for
         the pair parameters; `geom_avg_mixing` or `avg_mixing`.
+    flex_params: list of dict.
+        `{'delta': , 'kchi': , 'n': }` of each flexible dihedral; null
+        parameters with `n = 3` when omitted.
+    pair_selection: tuple, optional.
+        `(graph, coords, rotors)`: bond graph, coordinates (Angstrom) and
+        rotatable bonds. When given, only the pairs separated by a rotor whose
+        closest approach is below `pair_ratio` times their sigma are added
+        (`pair_selection.pair_ratios`); the others are kept in
+        `topobj.commented_pairs` for `append_commented_pairs`. When omitted,
+        every pair is added.
+    pair_ratio: float.
+        Largest `r_min / sigma` of a pair that is kept.
 
     Returns
     -------
@@ -299,50 +338,61 @@ def add_terms(
         counter += 1
 
     # Add flexible dihedrals
-    for flex in flexs:
+    for c, flex in enumerate(flexs):
         ai, aj, ak, al = flex
         dih = blocks.DihedralType('gromacs')
         dih.atom1 = topobj.molecules[0].atoms[ai]
         dih.atom2 = topobj.molecules[0].atoms[aj]
         dih.atom3 = topobj.molecules[0].atoms[ak]
         dih.atom4 = topobj.molecules[0].atoms[al]
-        dih.gromacs = fparms
+        dih.gromacs = fparms if flex_params is None else {'func': 1, 'param': [dict(flex_params[c])]}
         # dih.comment = f" {counter}"
         topobj.molecules[0].dihedrals.append(dih)
         counter += 1
 
-    # Add LJs
+    # Add LJs. Only the pairs whose distance changes with a torsion and that
+    # come close along it are kept; the others are listed, commented out, at
+    # the end of the [ pairs ] section
+    pairs = []
     for k, v in LJs.items():
         for pair in v:
             ai, aj = pair
-            ei = nb_params[ai]['epsilon']
-            si = nb_params[ai]['sigma']
+            eij, sij = mixing(nb_params[ai]['epsilon'], nb_params[aj]['epsilon'],
+                              nb_params[ai]['sigma'], nb_params[aj]['sigma'])
+            pairs.append((k, int(ai), int(aj), eij, sij))
 
-            ej = nb_params[aj]['epsilon']
-            sj = nb_params[aj]['sigma']
+    ratios = {}
+    if pair_selection is not None:
+        graph, coords, rotors = pair_selection
+        sigma = { (min(ai, aj), max(ai, aj)) : sij for k, ai, aj, eij, sij in pairs }
+        ratios = pair_ratios(graph, coords, rotors, LJs, sigma)
 
-            # eij = np.sqrt(ei * ej)
-            # sij = 0.5 * (si + sj)
-            eij, sij = mixing(ei, ej, si, sj)
+    topobj.pair_counts = { k : 0 for k in LJs }
+    topobj.commented_pairs = []
+    for k, ai, aj, eij, sij in pairs:
+        ratio = ratios.get((min(ai, aj), max(ai, aj)))
+        if pair_selection is not None and (ratio is None or ratio >= pair_ratio):
+            topobj.commented_pairs.append((ratio, ai, aj, eij, sij, k))
+            continue
 
-            nb = blocks.InteractionType('gromacs')
-            nb.atom1 = topobj.molecules[0].atoms[ai]
-            nb.atom2 = topobj.molecules[0].atoms[aj]
-            nb.gromacs = {
-                    'param': {
-                        'lje': None,
-                        'ljl':None,
-                        'lje14': eij,
-                        'ljl14': sij,
-                        'QQ': 1.000,
-                        'qi': 0.000,
-                        'qj': 0.000
-                        },
-                    'func': 2
-                    }
-            # nb.comment = f" {counter}"
-            topobj.molecules[0].pairs.append(nb)
-            counter += 1
+        nb = blocks.InteractionType('gromacs')
+        nb.atom1 = topobj.molecules[0].atoms[ai]
+        nb.atom2 = topobj.molecules[0].atoms[aj]
+        nb.gromacs = {
+                'param': {
+                    'lje': None,
+                    'ljl':None,
+                    'lje14': eij,
+                    'ljl14': sij,
+                    'QQ': 1.000,
+                    'qi': 0.000,
+                    'qj': 0.000
+                    },
+                'func': 2
+            }
+        topobj.molecules[0].pairs.append(nb)
+        topobj.pair_counts[k] += 1
+        counter += 1
 
     # Add exclusions
     for excl in excls:
@@ -353,6 +403,23 @@ def add_terms(
         topobj.molecules[0].exclusions.append(exc)
 
     return topobj
+
+
+def _atom_classes(eqs):
+    '''
+    Class label of each atom when the equivalences `eqs` partition the atoms
+    (each atom equivalent to itself, and every equivalent of an atom has the
+    same equivalents), None otherwise.
+    '''
+
+    classes = {}
+    for i, others in eqs.items():
+        members = set(int(j) for j in others) | { int(i) }
+        for j in members:
+            if j not in eqs or (set(int(x) for x in eqs[j]) | { int(j) }) != members:
+                return None
+        classes[i] = min(members)
+    return classes
 
 
 def find_deps(coords, eqs):
@@ -374,29 +441,45 @@ def find_deps(coords, eqs):
         row if there are none.
     '''
 
-    for c, coord in enumerate(coords):
+    eqcoords_all = []
+    classes = _atom_classes(eqs)
+    if classes is not None:
+        # equivalent atoms form a partition: coordinates are equivalent when
+        # their atoms are, position by position, in the same class (the same
+        # as testing every substitution of an atom by an equivalent one, at a
+        # cost that does not grow with the size of the classes)
+        groups = {}
+        for c, coord in enumerate(coords):
+            groups.setdefault(tuple(classes[i] for i in coord), []).append(c)
+        for c, coord in enumerate(coords):
+            idxs = [ i for i in groups[tuple(classes[i] for i in coord)] if i != c ]
+            if idxs:
+                eqcoords_all.append(np.c_[ np.ones(len(idxs), dtype=int) * c, idxs ])
+    else:
+        for c, coord in enumerate(coords):
 
-        transl = [ eqs[i] for i in coord ]
+            transl = [ eqs[i] for i in coord ]
 
-        # do all possible partial substitutions
-        subs = np.asarray([ list(i) for i in product(*transl) ])
+            # do all possible partial substitutions
+            subs = np.asarray([ list(i) for i in product(*transl) ])
 
-        # check if any of the generated coordinates is in the initial set
-        mask = (coords[:,None] == subs).all(axis=-1).any(axis=-1)
+            # check if any of the generated coordinates is in the initial set
+            mask = (coords[:,None] == subs).all(axis=-1).any(axis=-1)
 
-        # get their indices in the set of coordinates
-        idxs = np.where(mask)[0]
+            # get their indices in the set of coordinates
+            idxs = np.where(mask)[0]
 
-        # combine them with the index of current coordinate being checked
-        eqcoords = np.c_[ np.ones_like(idxs) * c, idxs ]
+            # combine them with the index of current coordinate being checked
+            eqcoords = np.c_[ np.ones_like(idxs) * c, idxs ]
 
-        # remove self-equivalent coordinates
-        eqcoords = eqcoords[eqcoords[:,0] != eqcoords[:,1]]
+            # remove self-equivalent coordinates
+            eqcoords = eqcoords[eqcoords[:,0] != eqcoords[:,1]]
+            eqcoords_all.append(eqcoords)
 
-        try:
-            equivs = np.r_[ equivs, eqcoords ]
-        except:
-            equivs = eqcoords
+    try:
+        equivs = np.vstack(eqcoords_all)
+    except ValueError:
+        equivs = np.empty((0, 2), dtype=int)
 
     # smaller coordinate first, and ordered by first coord
     # deal with no equivalences found
@@ -414,24 +497,83 @@ def main():
     '''Entry point of the `make_top` console script.'''
     Opts = options()
 
-    # Read in topology
+    # Names of the output files
+    if Opts['OutFile']:
+        out_stem = '.'.join(Opts['OutFile'].split(".")[:-1])
+        outfile = Opts['OutFile']
+    else:
+        src = Opts['TopFile'] or Opts['MolFile']
+        out_stem = '.'.join(src.split(".")[:-1])
+        # a topology made from the geometry has no older one to tell it from
+        outfile = out_stem + ('.new.top' if Opts['TopFile'] else '.top')
+    outcsv = out_stem + '.csv'
+    outdeps = out_stem + '_deps.dat'
+
+    # Read in topology, or perceive the atom types from the geometry: the
+    # starting topology is then a by-product, only its report is kept
     topfile = Opts['TopFile']
+    tmpdir = None
+    assign = []
+    type_comments = {}
+    if topfile is None:
+        tmpdir = tempfile.TemporaryDirectory()
+        topfile, assign = perceive_to_top(
+                Opts['MolFile'],
+                Opts['ff'],
+                Opts['gmx_top'],
+                out=os.path.join(tmpdir.name, 'types.top'),
+                class_name=not Opts['ff_type_names'],
+                resname=Opts['resname'],
+                report=out_stem + '.types',
+                numeric_placeholders=True,
+                marked_out=out_stem + '_types.top'
+            )
+        topfile = str(topfile)
+        type_comments = atomtype_comments(topfile)
+        print('Atom types perceived: %d atoms, %d by analogy, %d to check (see %s)' % (
+            len(assign), sum(a.analogue for a in assign),
+            sum(bool(a.flags or a.alternatives) for a in assign), out_stem + '.types'))
+        missing = sorted({a.element for a in assign if a.source == 'placeholder'})
+        if missing:
+            print('No force-field parameters for %s: %s lists them as FILL_ME; fill in sigma and '
+                  'epsilon there and run make_top again with -p %s to get the pairs.' % (
+                      ', '.join(missing), outfile,
+                      out_stem + '_types.top'))
 
     # Get internal coordinates and other information from geometry
     data = list_intcoords(Opts['MolFile'])
     bds, angles, stiff, impdiheds, flex, LJs, excls, rings, eq = data
+
+    # Treat each rotatable bond as done by hand: methyl rotors take literature
+    # parameters, single bonds between sp2 atoms get one scanned dihedral,
+    # double bonds get stiff dihedrals
+    u = mda.Universe(Opts['MolFile'])
+    feats = Features([ str(t).capitalize() for t in u.atoms.types ], u.atoms.positions, bds)
+    classes = topological_classes(feats.el, bds)
+    same = { i : np.where(classes == classes[i])[0] for i in range(feats.n) }
+    plan = classify_flex(feats, flex, same)
+    stiff = np.asarray(stiff).reshape(-1, 4)
+    stiff = np.vstack([ stiff, plan.double ])
+    flex = plan.flex
+
+    # Group bonds, angles and stiff dihedrals by ring system, so that the
+    # dependencies refer to the reordered coordinates
+    grouper = RingGrouper(feats)
+    order, bd_labels = grouper.group(bds)
+    bds = bds[order]
+    order, ang_labels = grouper.group(angles)
+    angles = angles[order]
+    order, stiff_labels = grouper.group(stiff)
+    stiff = stiff[order]
+    imp_labels = [ 'starlike' ] * len(impdiheds)
+    labels = bd_labels + ang_labels + stiff_labels + imp_labels + plan.labels
+    headers = { n + 1 : label for n, label in enumerate(labels) }
 
     # NEW: Get ring-based stiff dihedral equivalencies
     enhanced_eq, ring_dih_info = integrate_ring_dihedral_equivalencies(eq, stiff, rings)
 
     # Get specific stiff dihedral dependencies for ring dihedrals
     stiff_ring_deps = find_stiff_dihedral_deps(stiff, rings)
-
-    # # Print information about ring dihedral groupings (optional, for debugging)
-    # if len(ring_dih_info['ring_groups']) > 0:
-    #     print("Ring dihedral groupings found:")
-    #     for ring_idx, dih_indices in ring_dih_info['ring_groups'].items():
-    #         print(f"  Ring {ring_idx}: {len(dih_indices)} equivalent stiff dihedrals")
 
     # Create Topology (unchanged)
     topobj = add_terms(
@@ -443,21 +585,29 @@ def main():
             flex,
             LJs,
             excls,
-            mixing=Opts["MixingRule"]
+            mixing=Opts["MixingRule"],
+            flex_params=plan.params,
+            pair_selection=(feats.graph, feats.pos, plan.rotors),
+            pair_ratio=Opts['PairRatio']
         )
 
-    # Create output file names (unchanged)
-    if not Opts['OutFile']:
-        outfile = '.'.join(Opts['TopFile'].split(".")[:-1]) + '.new.top'
-        outcsv = '.'.join(Opts['TopFile'].split(".")[:-1]) + '.csv'
-        outdeps = '.'.join(Opts['TopFile'].split(".")[:-1]) + '_deps.dat'
-    else:
-        outfile = Opts['OutFile']
-        outcsv = '.'.join(Opts['OutFile'].split(".")[:-1]) + '.csv'
-        outdeps = '.'.join(Opts['OutFile'].split(".")[:-1]) + '_deps.dat'
+    if tmpdir is not None:
+        tmpdir.cleanup()
 
     # Write topology (unchanged)
     topobj.write(outfile)
+    insert_headers(outfile, headers)
+    commented = topobj.commented_pairs
+    reason = [
+            '; kept: 1,5 or farther apart, with a rotatable bond between the two atoms, and closer than',
+            '; %.2f sigma of the pair at the closest approach along that rotation (--pair-ratio); the others are commented below' % Opts['PairRatio']
+        ]
+    append_commented_pairs(outfile, [ format_commented_pair(ai, aj, eij, sij, ratio, k) for ratio, ai, aj, eij, sij, k in commented ], reason)
+    if type_comments:
+        add_atomtype_comments(outfile, type_comments)
+    missing = {a.element for a in assign if a.source == 'placeholder'}
+    if missing:
+        mark_missing_parameters(outfile, missing)
 
     # Create summary dataframe (unchanged)
     df = pd.DataFrame({
@@ -480,11 +630,11 @@ def main():
                 stiff.shape[0],
                 impdiheds.shape[0],
                 flex.shape[0],
-                LJs['1,4'].shape[0],
-                LJs['1,5'].shape[0],
-                LJs['1,6'].shape[0],
-                LJs['1,7'].shape[0],
-                LJs['other'].shape[0],
+                topobj.pair_counts['1,4'],
+                topobj.pair_counts['1,5'],
+                topobj.pair_counts['1,6'],
+                topobj.pair_counts['1,7'],
+                topobj.pair_counts['other'],
             ]
         })
 

@@ -18,13 +18,13 @@ setup(
         "networkx",
         "numpy",
         "pandas",
-        "pyscf",
-        # psi4 (point-group detection) is conda-only, hence not listed here.
+        "scipy",
     ],
-    extras_require={"test": ["pytest", "openmm"]},
+    extras_require={"test": ["pytest", "openmm", "rdkit"]},
     entry_points={
         'console_scripts' : [
             'make_top=SelIntCoords.make_top:main',
+            'perceive_types=SelIntCoords.perceive_types:main',
             'map_atoms=SelIntCoords.map_atoms:main',
             'renumber_top=SelIntCoords.renumber:main',
             'joyce_to_openmm=SelIntCoords.joyce_to_openmm:main',

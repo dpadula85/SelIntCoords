@@ -1,7 +1,6 @@
 """The run_example.sh workflow through the Python API, for BTBT.
 
-make_top needs psi4 for the symmetry grouping; map_atoms, renumber and
-joyce_to_openmm do not.
+The steps are the same as the command-line tools.
 """
 from pathlib import Path
 

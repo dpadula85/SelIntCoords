@@ -1,5 +1,5 @@
 #!/bin/bash
-# make_top on every core in this directory (needs psi4, see ../README.md),
+# make_top on every core in this directory (see ../README.md),
 # then make one result readable by both GROMACS and OpenMM.
 set -e
 cd "$(dirname "$0")"

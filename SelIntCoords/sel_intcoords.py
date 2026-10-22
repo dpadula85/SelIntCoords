@@ -16,20 +16,10 @@ from MDAnalysis.lib.util import unique_rows
 
 from chain_cropper.topology import get_sp2
 
-try:
-    from pyscf.symm.geom import detect_symm, symm_identical_atoms
-except ImportError:
-    detect_symm = symm_identical_atoms = None
-
-try:
-    import psi4
-except ImportError:
-    psi4 = None
+from .symmetry import equivalent_atoms
 
 import warnings
 warnings.filterwarnings("ignore")
-
-au2ang = 0.5291771
 
 
 def flatten(lst):
@@ -313,6 +303,10 @@ def get_equivalent_hydrogens(u, G):
         hbd = findPaths(G, h, 1)
         hbds.extend(hbd)
 
+    # no hydrogens (fullerenes)
+    if not hbds:
+        return {}
+
     hbds = np.fliplr(np.asarray(hbds))
     hbds = hbds[hbds[:,0].argsort()]
     ghbds = np.split(hbds[:,1], np.unique(hbds[:,0], return_index=True)[1][1:])
@@ -325,55 +319,28 @@ def get_equivalent_hydrogens(u, G):
     return eq_hs
 
 
-def get_equivalent_atoms(u):
+def get_equivalent_atoms(u, tol=0.01):
     '''
-    Function to get equivalent atoms in a molecule from symmetry point group.
-    For this to work the geometry of the molecule needs to be aligned to the
-    cartesian axes.
+    Function to get equivalent atoms in a molecule from its point-group
+    symmetry (see `symmetry.py`): atoms that a symmetry operation of the
+    geometry, within a tolerance, maps onto one another.
 
     Parameters
     ----------
     u: object.
         MDAnalysis Universe representing the molecule.
+    tol: float.
+        Largest displacement (Angstrom) for an operation to count as a
+        symmetry of the geometry.
 
     Returns
     -------
     eq_ats: dict.
-        Dictionary of equivalent atoms.
+        Dictionary of equivalent atoms: every atom is a key, with the array
+        of the other atoms equivalent to it (empty if none).
     '''
 
-    if psi4 is None or detect_symm is None:
-        raise ImportError(
-            "Symmetry detection needs psi4 (conda install -c conda-forge "
-            "psi4) and pyscf"
-        )
-
-    # Symmetrise molecule to detect point group
-    m = psi4.core.Molecule.from_arrays(
-            elem=u.atoms.types,
-            geom=u.atoms.positions,
-            molecular_charge=0,
-            molecular_multiplicity=1
-        )
-    m.symmetrize(0.01)
-    m.update_geometry()
-
-    coords, _, _, _, _ = m.to_arrays()
-    # pg = m.find_highest_point_group()
-    # point_group = pg.full_name()
-
-    atoms = list(zip(u.atoms.types, coords * au2ang ))
-
-    # Use symmetry to detect equivalence between atoms
-    point_group, coq, axes = detect_symm(atoms)
-    eqs = symm_identical_atoms(point_group, atoms)
-
-    eq_ats = {}
-    for group in eqs:
-        for i, at in enumerate(group):
-            eq_ats[at] = np.delete(group, i)
-
-    return eq_ats
+    return equivalent_atoms(list(u.atoms.types), u.atoms.positions, tol)
 
 
 def list_intcoords(coordfile):

@@ -23,7 +23,7 @@ except `[ defaults ]`, `[ atomtypes ]`, `[ moleculetype ]`, `[ atoms ]`,
 ## Running
 
 ```bash
-bash run_example.sh      # make_top on all seven (needs psi4), then joyce_to_openmm on BTBT
+bash run_example.sh      # make_top on all seven, then joyce_to_openmm on BTBT
 python3 run_example.py   # the same steps for BTBT through the Python API, plus map_atoms/renumber
 ```
 
@@ -54,5 +54,4 @@ flexible dihedrals are where the Joyce topologies of `D18` (81) and
 ## Things to be careful of
 
 - **Atom order**: the `.xyz` must list atoms in the same order as the `.top`.
-- **No psi4, no `make_top`**: the symmetry grouping needs it (see the main README).
 - **Heavy molecules**: `map_atoms` on the larger repeat units can take long, because of the many symmetric alkyl and ring automorphisms; use `-v`.
