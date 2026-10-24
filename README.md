@@ -13,19 +13,22 @@
 
 ---
 
-[Joyce](https://www.dsf.unica.it/~fabio/Joyce.php) fits a force field to
-quantum-mechanical data, one set of parameters per *internal coordinate*
-(bond, angle, dihedral). Which coordinates exist, which are rigid and
-which rotate, and which are equivalent by symmetry and must share a
-parameter, has to be told to Joyce up front. SelIntCoords works that out
-from the geometry, writes the GROMACS topology Joyce starts from, and
-provides the tools to keep that topology usable afterwards: renumbering
-it to an experimental structure, and making it read identically by GROMACS
-and OpenMM.
+[Joyce](https://www.dsf.unica.it/~fabio/Joyce.php) (Joyce3.0: Giannini et al.,
+[J. Chem. Theory Comput. 2025, 21, 3156](https://doi.org/10.1021/acs.jctc.5c00010)) fits a force
+field to quantum-mechanical data, one set of parameters per *internal coordinate* (bond, angle,
+dihedral). The fit is done in steps: the harmonic ("stiff") terms are fitted to the QM Hessian, then,
+with those fixed, the rotations about single bonds ("flexible" dihedrals) are fitted to relaxed
+torsional scans, with the intramolecular Lennard-Jones pairs that the molecule needs.
 
-It targets rigid, (semi-)planar organic semiconductor cores with optional
-alkyl/ether side chains (examples: BTBT, DNBDT, pentacene, DPP, D18). The
-output feeds [oligomer_builder](https://github.com/dpadula85/oligomer_builder).
+Before any of that Joyce has to be told which coordinates exist, which are stiff and which are
+flexible, which pairs of atoms interact, and which coordinates are equivalent and must share a
+parameter. SelIntCoords works that out from the geometry and writes the GROMACS topology Joyce
+starts from, with the dependencies. It also provides the tools to keep that topology usable
+afterwards: renumbering it to another structure, and making it read identically by GROMACS and OpenMM.
+
+It targets rigid, (semi-)planar organic cores with optional alkyl/ether side chains. The output feeds
+[oligomer_builder](https://github.com/dpadula85/oligomer_builder).
+
 
 ## Installation
 
@@ -44,44 +47,162 @@ Nothing else is needed beyond `pip`: the OPLS-AA files for
 
 | I want to... | Tool | Needs |
 |---|---|---|
+| Only look at the atom types a geometry gets (no bonded terms) | `perceive_types` | - |
 | Get the topology and `$dependence` file Joyce starts from, from the `.xyz` alone | `make_top -m geometry.xyz` | - |
 | The same, with atom types you wrote or edited yourself | `make_top -p initial.top -m geometry.xyz` | - |
-| Only look at the atom types a geometry gets (no bonded terms) | `perceive_types` | - |
 | Make atom numbering follow another structure (e.g. crystal) | `map_atoms`, then `renumber_top` | - |
 | Make a Joyce `.top` readable by both GROMACS and OpenMM | `joyce_to_openmm` | - |
 | Get OpenMM energies equal to GROMACS ones | `openmm_compat.load_top` | openmm |
 
+The steps, in the order they are done:
+
 ```
- geometry.xyz ──(1) make_top──> geometry.top, .csv, _deps.dat, .types ──> Joyce
-                   (atom types perceived inside; or give your own with -p initial.top)
+ geometry.xyz ──(1) atom types──(2) make_top──> geometry.top, .csv, _deps.dat, .types ──> Joyce
+        (perceive_types alone to look at the types; make_top does it inside, or takes yours with -p)
                                                         │
- crystal.xyz ──(2) map_atoms──> map.txt ──> renumber_top┘   (atoms now follow crystal.xyz)
+ other.xyz ──(3) map_atoms──> map.txt ──> renumber_top──┘   (atoms now follow other.xyz)
                                                         │
-                                  (3) joyce_to_openmm ──┴──> .top for GROMACS and OpenMM
+                                  (4) joyce_to_openmm ──┴──> .top for GROMACS and OpenMM
+                                  (5) openmm_compat: OpenMM energies equal to GROMACS ones
+```
+
+
+## Atom type perception
+
+This is the first thing done, inside `make_top` or on its own with `perceive_types`.
+
+`make_top` needs the **atom type** of each atom: the label that tells a
+force field which Lennard-Jones parameters (and mass) to use, for example
+"aromatic carbon" or "thiophene sulfur". It reads the types from the
+geometry, so no starting `.top` has to be written, using the OPLS-AA force
+field (mass and Lennard-Jones parameters per type, and the residue templates
+of the force field). Its files are shipped with the package, copied unchanged
+from GROMACS 2020 ([`SelIntCoords/data/top`](SelIntCoords/data/top/README.md),
+with the licence and references); any other force field of the GROMACS
+database is read from a GROMACS installation.
+
+Bonds are guessed as in `make_top`, then each atom is classified from its
+neighbours, its hybridisation (from the bond angles) and its rings (aromatic
+means a planar five- or six-membered ring with the right electron count; a
+ring containing a carbonyl, such as a lactam or imide ring, is not
+aromatic). Two engines type the atoms, in this order:
+
+1. **Curated rules** for OPLS-AA (hydrocarbons, aromatic and heteroaromatic
+   rings, ethers, alcohols, amines, amides and imides, esters, ketones,
+   acids, nitriles, nitro, halogens, sulfur groups), checked against the
+   types the example `.top` files were written with.
+2. **Types learned from the residue templates** of the force field, for an
+   atom no rule covers, and as a cross-check on all the others.
+
+An atom neither engine can type, or a charged species (pyridinium-type
+nitrogen), raises an error: it is never guessed. Charges in the written
+`.top` are zero.
+
+```bash
+make_top -m molecule.xyz [--ff oplsaa] [--gmx-top DIR] [--ff-type-names] [--resname MOL]
+perceive_types -m molecule.xyz [-o molecule_types.top]    # only the starting topology and the report
+```
+
+`--ff` is the force field (default `oplsaa`). `--gmx-top` points at a directory with
+the `<name>.ff` folders; by default the shipped OPLS-AA files, and for another
+force field `$GMXLIB`, `$GMXDATA/top`, or the one next to the `gmx` executable. Atomtypes are named by local environment (`CA1`, `CA2` for aromatic carbons bonded to
+different neighbours, `HC`, `S`...) and atoms by element and number (`S1`, `C2`);
+the force-field type stays in the comment of each atomtype line. `--ff-type-names`
+names the atomtypes by force-field type (`opls_145`) instead. `perceive_types` is the same
+perception on its own: it writes the minimal `.top` that `make_top -p` takes,
+useful to inspect or edit the types before building the terms.
+
+The report is `<name>.types` for `make_top` and `<name>_types.types` for `perceive_types`:
+
+```
+Atom types perceived from molecule.xyz (oplsaa)
+63 atoms: 63 typed by rule, 0 learned from residue templates, 25 by analogy, 2 to check
+...
+Typed by analogy (no dedicated type in oplsaa, the closest published one used):
+  opls_633  S   in thiazole  <- aromatic S: atoms 9 15 25 34
+...
+Atoms to check:
+   35 H   opls_469 (H on C bonded to an ester O)
+        - rules and learned types disagree on the Lennard-Jones class
+        - alternative opls_140 [learned (radius 2)]: alkane H.
+```
+
+Two things in the report need your judgement:
+
+- **Typed by analogy.** OPLS-AA has no thiophene, furan or thiadiazole
+  types. The aromatic S is typed as thiazole S (`opls_633`), the carbons of
+  heteroaromatic rings as benzene C (`opls_145`), a two-coordinate aromatic N
+  of a five-membered ring as imidazole N (`opls_557`), the sp2 carbons of
+  a lactam ring as pyrrole C2/C3 (`opls_543/544`), and the conjugated carbons
+  that are not aromatic by the electron count as benzene C (`opls_145`): a
+  ring ketone C between two conjugated carbons (quinones, indanones), an alkene C
+  without H and with two conjugated neighbours (a `C=C(CN)2` end group), a
+  pyramidalised sp2 C of a fullerene, and a quaternary sp3 C between two conjugated
+  carbons. The `=CH-` of the same units stays an alkene C, and isolated alkenes and
+  acyclic ketones keep their OPLS-AA types. These are the usual choices of
+  hand-made force fields, not the only possible ones.
+- **Atoms to check.** The rules and the learned types give different
+  Lennard-Jones classes, or the learned type was the only answer and rests on
+  a short-range environment.
+
+How well it agrees with hand-typed topologies, for OPLS-AA, comparing the mass and
+Lennard-Jones parameters of the perceived type with those of the topology each molecule
+was parameterised with:
+
+- all but two of the 362 atoms of the shipped [examples](examples/); the two are atoms
+  whose hand-typed epsilon differs slightly from the library value;
+- 11070 of 11074 atoms (those whose topology holds OPLS-AA values or the literature
+  values of Se and Si) of 74 hand-parameterised molecules; the others have refitted
+  Lennard-Jones values and cannot be compared, and the 4 differences are atoms typed by
+  hand with other parameters;
+- the exact `opls_` number can differ where several types share their parameters (the
+  alkane carbons, `opls_135`-`139` by number of hydrogens, can all be one hand-typed number);
+- fed to `make_top`, the perceived types give the same bonds, angles, dihedrals, pairs and
+  exclusions as the hand-written topology of the examples;
+- the learned engine, tested by leaving a residue and its variants out of its own training
+  set, recovers the Lennard-Jones class of 93% of the OPLS-AA atoms.
+
+Selenium and silicon are typed from literature values (`extra_types.py`: Se 78.971 u, sigma 0.37741 nm, epsilon
+1.21754 kJ/mol; Si 28.0855 u, 0.4184 nm, 0.295 kJ/mol, each with its reference).
+Any other element with no OPLS-AA type gets an atomtype whose sigma and epsilon
+read `FILL_ME`: `make_top` writes the topology with the marker, keeps
+`<name>_types.top` (the same with placeholder numbers), and tells you to fill in
+the two values and run `make_top -p <name>_types.top`. A group no rule covers
+is an error that names the atoms.
+Bond guessing is the one of `make_top`: in unrelaxed oligomers it can add a bond
+between an H and an S that touch (1.47 Angstrom), which makes the S untypeable:
+`make_top` then stops with an error that names the atom.
+
+**Not validated:** force fields other than OPLS-AA have no curated rules
+(`--ff amber99sb-ildn` runs on the learned engine alone and is far less
+reliable for anything outside the biomolecular templates); neutral molecules
+only; little testing outside the conjugated organic chemistry of the examples and
+hand-made force fields beyond the 31 small functional-group cases in `tests/`.
+
+```python
+from SelIntCoords.perceive_types import perceive_to_top
+
+top, assignments = perceive_to_top("molecule.xyz", ff_name="oplsaa", class_name=True)   # as perceive_types
+assignments[0].type, assignments[0].rule      # ('opls_633', 'aromatic S')
 ```
 
 ## make_top
 
-Input: a geometry. `make_top` perceives the atom type of every atom (see
-[below](#atom-type-perception)), guesses the bonds, then enumerates
-bonds, angles, proper and improper dihedrals, 1-n Lennard-Jones pairs and
-exclusions from the bond graph. Proper dihedrals are split into **stiff**
-(ring and conjugated core, near-planar) and **flexible** (rotatable side
-chains). Atoms equivalent by the symmetry of the bond graph (the three H of
-a methyl, the two methyls of a gem-dimethyl, the two halves of a symmetric
-molecule, whatever the conformation; never atoms of different atom type) are
-identified so that equivalent coordinates are fitted together. All new terms get zero
-parameters for Joyce to fit, except the methyl rotations ([below](#rotatable-bonds)).
+Input: a geometry, and optionally atom types of your own. Output: the complete topology Joyce starts
+from, the `$dependence` file and a coordinate count. `make_top` goes through the
+[steps below](#what-make_top-does-step-by-step) in order: atom types, bonds, rings, symmetry, coordinates, stiff
+or flexible, kind of rotor, grouping, pairs, dependencies. All new terms get zero parameters for Joyce to fit,
+except the methyl rotations and ring dihedrals, which take literature values ([below](#rotatable-bonds)).
 
 ```bash
-make_top -m BTBT.xyz                       # types perceived inside, full topology out
-make_top -p BTBT.top -m BTBT.xyz           # your own minimal .top (atomtypes + atoms), same atom order
+make_top -m molecule.xyz                   # types perceived inside, full topology out
+make_top -p molecule.top -m molecule.xyz   # your own minimal .top (atomtypes + atoms), same atom order
 ```
 
-Without `-o` the outputs are `BTBT.top`, `BTBT.csv`, `BTBT_deps.dat` and the
-report `BTBT.types`. With `-o X.top` they are `X.top`, `X.csv`, `X_deps.dat`,
+Without `-o` the outputs are `molecule.top`, `molecule.csv`, `molecule_deps.dat` and the
+report `molecule.types`. With `-o X.top` they are `X.top`, `X.csv`, `X_deps.dat`,
 `X.types`. When you give `-p`, nothing is perceived, your atom types are used as
-they are, and the topology is `BTBT.new.top` (there is an older one to tell it from).
+they are, and the topology is `molecule.new.top` (there is an older one to tell it from).
 
 `-l` picks the mixing rule for the pair parameters: geometric (default)
 or arithmetic. Output, next to `-o`: the topology, a `_deps.dat` in Joyce's
@@ -92,7 +213,7 @@ or arithmetic. Output, next to `-o`: the topology, a `_deps.dat` in Joyce's
 The rules in the order they are applied. Each step uses only what the steps above it produced, and
 the later sections of this README give the details.
 
-1. **Atom types.** Perceived from the geometry ([below](#atom-type-perception)) or read from `-p`.
+1. **Atom types.** Perceived from the geometry ([above](#atom-type-perception)) or read from `-p`.
    They give the Lennard-Jones parameters and tell atoms apart: two atoms of different type are never
    equivalent.
 2. **Bonds.** Guessed from the distances between atoms. From here on the molecule is a graph: atoms
@@ -110,7 +231,7 @@ the later sections of this README give the details.
    ring. Each ring torsion exists twice (near 0 and near 180 degrees): the one within 15 degrees of 0 is
    kept. Every other proper dihedral is *flexible*.
 7. **Kind of each flexible dihedral**, by the bond it turns about; the first rule that fits wins
-   ([table](#rotatable-bonds)):
+   ([details](#rotatable-bonds)):
    1. a methyl: three H-C-X-Y dihedrals, parameters fixed from the literature;
    2. a ring bond that is not part of the planar framework: literature parameters;
    3. a double bond: stiff if an atom is in a ring, otherwise a rotor fitted to a scan (`phi`);
@@ -128,6 +249,82 @@ the later sections of this README give the details.
    molecule ([pairs](#which-pairs-are-written)). All parameters are zero, for Joyce to fit, except the
    methyl and ring-dihedral values of step 7 and the pair parameters (mixing rule).
 10. **Dependencies** ([below](#dependencies)): which coordinates must share a force constant.
+
+### Rotatable bonds
+
+The dihedrals about a bond that is not in a ring are treated as you would by
+hand:
+
+| bond | what `make_top` writes |
+|---|---|
+| methyl on C, N, O, S or Se | `; methyls`: the H-C-X-Y dihedrals, funct 1, `n = 3`, `k = 0.651` kJ/mol, no phase (fixed, not fitted) |
+| bond in a ring that is not part of the planar framework (sp3 carbons of a locking ring) | `; ring dihedrals (literature)`: every dihedral about it, same parameters as the methyls |
+| double bond with no atom in a ring (the chain of a polyene) | `; phi1`, `; phi2`...: the same as a `delta`, for a bond that is double |
+| double bond with an atom in a ring (exocyclic C=C, C=N joining two rigid units) | all its dihedrals join the stiff ones |
+| single bond between two rigid units (rings, sp2 atoms, azo N), directly or through sp3 linker atoms (ring-ring, ring-C=O, ring-O-CH2-CH2-ring) | `; delta1`, `; delta2`...: one dihedral per bond, the one over the sp2 carbons when there is a choice, with a single `n = 2` term; equivalent bonds share the header |
+| first bond of a side chain: from a rigid unit to an sp3 atom with a heavy atom beyond it (aryl-S-CH3, ring-CH2-CH3, N-CH2-CH3) | `; delta<N>`, numbered after the bonds between rigid units: one dihedral per bond, the one over the heavy atoms; equivalent bonds share the header and the same dihedral, carried from one to the other by a symmetry of the bond graph |
+| anything else (the bonds of a side chain beyond the first, a group that turns as a unit such as CF3 or tert-butyl, Si methyls) | `; flexible (merge or by hand)`: zero parameters, left to `oligomer_builder` or to you |
+
+The value 0.651 kJ/mol is 0.1556 kcal/mol, the GAFF barrier of `X-c3-c3-X` (Wang
+et al., [J. Comput. Chem. 2004, 25, 1157](https://doi.org/10.1002/jcc.20035)).
+
+A bond is double when it is shorter than 0.92 times the sum of the covalent
+radii (C=C 1.34-1.38 Angstrom against 1.43-1.47 for an sp2-sp2 single bond) and
+the shortest of the candidates at both atoms, which keeps the single and double
+bonds of a conjugated chain alternating.
+
+### Grouping by ring system
+
+Bonds, angles and stiff dihedrals are written in groups, each under a
+`; header` line that names the ring they belong to (`thiophene 1`, `benzene`,
+`benzene + 2 thiophene (fused)`). A ring system is a set of
+rings that share a bond; the hydrogens of a ring stay with it. The groups are:
+
+| header | coordinates in it |
+|---|---|
+| `thiophene 1` | every atom in that ring system |
+| `thiophene 1 substituents` | the ring plus a side chain bonded to it only |
+| `thiophene 1 to benzene` | a link (single bond, vinylene...) between two ring systems |
+| `methyls` | anything that involves a methyl group |
+| `starlike` | the improper dihedrals (written after the stiff ones) |
+
+The coordinates are renumbered in this order *before* the dependencies are
+computed, so `_deps.dat` and the `.csv` refer to the order of the file.
+
+### Which pairs are written
+
+A topology made for Joyce excludes every non-bonded pair inside the molecule, so two atoms without a
+`[ pairs ]` line pass through each other. `make_top` writes a pair when some conformer of the molecule
+brings it too close. The conformers are those of a rigid-rotor model: bond lengths, angles, rings and
+double bonds stay as they are, and only the single bonds that split the molecule turn (methyl rotors
+included). The selection does by computer what is done by hand: twist the molecule, see what collides,
+add the pair, twist again.
+
+1. Start with no pairs. Draw random conformers in which the pairs chosen so far are hard spheres.
+2. A pair that comes closer than 0.8 sigma (`--pair-ratio`) in at least 1 % of them
+   (`--pair-fraction`) is added.
+3. If any pair between two ring systems bumps even once, every heavy-atom pair between the two systems
+   is added (a stacking contact).
+4. Repeat until nothing is added. Pairs that a symmetry of the bond graph maps onto each other are
+   written together.
+
+Only heavy-heavy and H...H pairs that are 1,5 or farther apart are written. Hydrogen-heavy pairs act as
+hard spheres in the sampling but are not written, and 1,4 pairs are covered by the dihedral. The pair
+parameters are the mixing-rule values, unscaled. Every pair not written is listed commented out after
+the written ones, with its closest approach in units of sigma, so that one can be uncommented by hand.
+
+The cost grows with the number of atoms and of 1,5-or-farther pairs: a few seconds for molecules of 30 to
+120 atoms, and about 5 minutes for an oligomer of about 250 atoms. The oligomer gets about
+2500 pairs, because in a flexible chain every ring can touch every other ring
+and a ring contact brings in all the pairs of the two rings: the selection is meant for monomers and
+cores, not oligomers.
+
+**What was checked.** Against the pairs an automatic procedure of hot MD and relaxed scans adds to a
+short starting list, the selection, from an empty list and without MD, found about 85 % of them on a test
+molecule, plus some that the MD did not add. The ones it misses are contacts that appear only when
+bonds and angles bend, which a rigid-rotor model cannot bring about. This is one molecule, not a systematic
+validation. Hand-made topologies can hold many more pairs than contacts alone give, because they were
+chosen for the torsional scans they affect.
 
 ### Dependencies
 
@@ -160,216 +357,6 @@ Each line ends with a `;` comment saying what is tied and why:
 `symm eq` is symmetry (rule 1), `same k in ring` rule 2, `oop` (out-of-plane) rule 3, `k` the force constant; `dihed`
 is a stiff dihedral, `star` a starlike improper.
 
-### Which pairs are written
-
-A topology made for Joyce excludes every non-bonded pair inside the molecule, so two atoms without a
-`[ pairs ]` line pass through each other. `make_top` writes a pair when some conformer of the molecule
-brings it too close. The conformers are those of a rigid-rotor model: bond lengths, angles, rings and
-double bonds stay as they are, and only the single bonds that split the molecule turn (methyl rotors
-included). The selection does by computer what is done by hand: twist the molecule, see what collides,
-add the pair, twist again.
-
-1. Start with no pairs. Draw random conformers in which the pairs chosen so far are hard spheres.
-2. A pair that comes closer than 0.8 sigma (`--pair-ratio`) in at least 1 % of them
-   (`--pair-fraction`) is added.
-3. If any pair between two ring systems bumps even once, every heavy-atom pair between the two systems
-   is added (a stacking contact).
-4. Repeat until nothing is added. Pairs that a symmetry of the bond graph maps onto each other are
-   written together.
-
-Only heavy-heavy and H...H pairs that are 1,5 or farther apart are written. Hydrogen-heavy pairs act as
-hard spheres in the sampling but are not written, and 1,4 pairs are covered by the dihedral. The pair
-parameters are the mixing-rule values, unscaled. Every pair not written is listed commented out after
-the written ones, with its closest approach in units of sigma, so that one can be uncommented by hand.
-
-| molecule | atoms | pairs written | `make_top` time |
-|---|---|---|---|
-| BTBT | 36 | 12 | 3 s |
-| trans azo dye (`tests/data/DAB.xyz`) | 52 | 207 | 8 s |
-| D18 monomer | 87 | 109 | 8 s |
-| ZR1 | 120 | 182 | 15 s |
-
-The cost grows with the number of atoms and of 1,5-or-farther pairs. A 254-atom oligomer takes about
-5 minutes and gets about 2500 pairs, because in a flexible chain every ring can touch every other ring
-and a ring contact brings in all the pairs of the two rings: the selection is meant for monomers and
-cores, not oligomers.
-
-**What was checked.** On the trans azo dye, joyce_autoval starts from 26 pairs and adds about 205 after
-its hot MD and relaxed scans. The selection, from an empty list and without MD, contains 171 of the 201
-heavy-heavy and H...H pairs of that final list (85 %) and 36 that autoval did not add. The pairs it
-misses are one ring pair that autoval found only in the relaxed MM scans, where bonds and angles bend: a
-rigid-rotor model cannot bring those two rings together. This is one molecule, not a systematic
-validation. For retinals the selection gives 36-63 pairs against about 200 in hand-made topologies,
-which were chosen for the torsional scans they affect and not only for contacts.
-
-### Grouping by ring system
-
-Bonds, angles and stiff dihedrals are written in groups, each under a
-`; header` line that names the ring they belong to (`thiophene 1`, `benzene`,
-`pentacene`, `benzene + 2 thiophene (fused)`). A ring system is a set of
-rings that share a bond; the hydrogens of a ring stay with it. The groups are:
-
-| header | coordinates in it |
-|---|---|
-| `thiophene 1` | every atom in that ring system |
-| `thiophene 1 substituents` | the ring plus a side chain bonded to it only |
-| `thiophene 1 to benzene` | a link (single bond, vinylene...) between two ring systems |
-| `methyls` | anything that involves a methyl group |
-| `starlike` | the improper dihedrals (written after the stiff ones) |
-
-The coordinates are renumbered in this order *before* the dependencies are
-computed, so `_deps.dat` and the `.csv` refer to the order of the file.
-
-### Rotatable bonds
-
-The dihedrals about a bond that is not in a ring are treated as you would by
-hand:
-
-| bond | what `make_top` writes |
-|---|---|
-| methyl on C, N, O, S or Se | `; methyls`: the H-C-X-Y dihedrals, funct 1, `n = 3`, `k = 0.651` kJ/mol, no phase (fixed, not fitted) |
-| bond in a ring that is not part of the planar framework (sp3 carbons of a locking ring) | `; ring dihedrals (literature)`: every dihedral about it, same parameters as the methyls |
-| single bond between two rigid units (rings, sp2 atoms, azo N), directly or through sp3 linker atoms (ring-ring, ring-C=O, ring-O-CH2-CH2-ring) | `; delta1`, `; delta2`...: one dihedral per bond, the one over the sp2 carbons when there is a choice, with a single `n = 2` term; equivalent bonds share the header |
-| double bond with no atom in a ring (the chain of a retinal) | `; phi1`, `; phi2`...: the same as a `delta`, for a bond that is double |
-| double bond with an atom in a ring (exocyclic C=C, C=N joining two rigid units) | all its dihedrals join the stiff ones |
-| first bond of a side chain: from a rigid unit to an sp3 atom with a heavy atom beyond it (aryl-S-CH3, ring-CH2-CH3, N-CH2-CH3) | `; delta<N>`, numbered after the bonds between rigid units: one dihedral per bond, the one over the heavy atoms; equivalent bonds share the header and the same dihedral, carried from one to the other by a symmetry of the bond graph |
-| anything else (the bonds of a side chain beyond the first, a group that turns as a unit such as CF3 or tert-butyl, Si methyls) | `; flexible (merge or by hand)`: zero parameters, left to `oligomer_builder` or to you |
-
-The value 0.651 kJ/mol is 0.1556 kcal/mol, the GAFF barrier of `X-c3-c3-X` (Wang
-et al., [J. Comput. Chem. 2004, 25, 1157](https://doi.org/10.1002/jcc.20035)); the
-retinal QMD-FFs take their ring torsions from GAFF in the same way.
-
-A bond is double when it is shorter than 0.92 times the sum of the covalent
-radii (C=C 1.34-1.38 Angstrom against 1.43-1.47 for an sp2-sp2 single bond) and
-the shortest of the candidates at both atoms, which keeps the single and double
-bonds of a conjugated chain alternating.
-
-## Atom type perception
-
-`make_top` needs the **atom type** of each atom: the label that tells a
-force field which Lennard-Jones parameters (and mass) to use, for example
-"aromatic carbon" or "thiophene sulfur". It reads the types from the
-geometry, so no starting `.top` has to be written, using the OPLS-AA force
-field (mass and Lennard-Jones parameters per type, and the residue templates
-of the force field). Its files are shipped with the package, copied unchanged
-from GROMACS 2020 ([`SelIntCoords/data/top`](SelIntCoords/data/top/README.md),
-with the licence and references); any other force field of the GROMACS
-database is read from a GROMACS installation.
-
-Bonds are guessed as in `make_top`, then each atom is classified from its
-neighbours, its hybridisation (from the bond angles) and its rings (aromatic
-means a planar five- or six-membered ring with the right electron count; a
-ring containing a carbonyl, such as a lactam or imide ring, is not
-aromatic). Two engines type the atoms, in this order:
-
-1. **Curated rules** for OPLS-AA (hydrocarbons, aromatic and heteroaromatic
-   rings, ethers, alcohols, amines, amides and imides, esters, ketones,
-   acids, nitriles, nitro, halogens, sulfur groups), checked against the
-   types the example `.top` files were written with.
-2. **Types learned from the residue templates** of the force field, for an
-   atom no rule covers, and as a cross-check on all the others.
-
-An atom neither engine can type, or a charged species (pyridinium-type
-nitrogen), raises an error: it is never guessed. Charges in the written
-`.top` are zero.
-
-```bash
-make_top -m BTBT.xyz [--ff oplsaa] [--gmx-top DIR] [--ff-type-names] [--resname MOL]
-perceive_types -m BTBT.xyz [-o BTBT_types.top]    # only the starting topology and the report
-```
-
-`--ff` is the force field (default `oplsaa`). `--gmx-top` points at a directory with
-the `<name>.ff` folders; by default the shipped OPLS-AA files, and for another
-force field `$GMXLIB`, `$GMXDATA/top`, or the one next to the `gmx` executable. Atomtypes are named by local environment (`CA1`, `CA2` for aromatic carbons bonded to
-different neighbours, `HC`, `S`...) and atoms by element and number (`S1`, `C2`);
-the force-field type stays in the comment of each atomtype line. `--ff-type-names`
-names the atomtypes by force-field type (`opls_145`) instead. `perceive_types` is the same
-perception on its own: it writes the minimal `.top` that `make_top -p` takes,
-useful to inspect or edit the types before building the terms.
-
-The report (`<name>.types` for `make_top`, `<name>_types.types` for `perceive_types`). For PBDTTT-O:
-
-```
-Atom types perceived from PBDTTT-O.xyz (oplsaa)
-63 atoms: 63 typed by rule, 0 learned from residue templates, 25 by analogy, 2 to check
-...
-Typed by analogy (no dedicated type in oplsaa, the closest published one used):
-  opls_633  S   in thiazole  <- aromatic S: atoms 9 15 25 34
-...
-Atoms to check:
-   35 H   opls_469 (H on C bonded to an ester O)
-        - rules and learned types disagree on the Lennard-Jones class
-        - alternative opls_140 [learned (radius 2)]: alkane H.
-```
-
-Two things in the report need your judgement:
-
-- **Typed by analogy.** OPLS-AA has no thiophene, furan or thiadiazole
-  types. The aromatic S is typed as thiazole S (`opls_633`), the carbons of
-  heteroaromatic rings as benzene C (`opls_145`), a two-coordinate aromatic N
-  of a five-membered ring as imidazole N (`opls_557`), the sp2 carbons of
-  a lactam ring as pyrrole C2/C3 (`opls_543/544`), and the conjugated carbons
-  that are not aromatic by the electron count as benzene C (`opls_145`): a
-  ring ketone C between two conjugated carbons (the quinone of PM6, the
-  indanone of IDIC and Y6), an alkene C without H and with two conjugated
-  neighbours (the `C=C(CN)2` arm), a pyramidalised sp2 C of a fullerene, and a
-  quaternary sp3 C between two conjugated carbons. The `=CH-` of the same units
-  stays an alkene C, and isolated alkenes and acyclic ketones keep their
-  OPLS-AA types. These are the choices of the [examples](examples/) and of the
-  QMD-FFs, not the only possible ones.
-- **Atoms to check.** The rules and the learned types give different
-  Lennard-Jones classes, or the learned type was the only answer and rests on
-  a short-range environment.
-
-Numbers behind it, for OPLS-AA, comparing the mass and Lennard-Jones
-parameters of the perceived type with those of the topology each molecule
-was parameterised with:
-
-- the seven [examples](examples/) (362 atoms): 360 equal; the other two are the
-  furan oxygens of PBDTTT-O, whose hand-typed epsilon (0.5876 kJ/mol) differs
-  from `opls_566` (0.58576);
-- the 74 molecule types of the QMD-FFs repository that have a geometry next to
-  the topology (11481 atoms): 11070 of the 11074 atoms whose topology holds
-  OPLS-AA values (or the literature values of Se and Si) are equal; the others
-  have refitted Lennard-Jones values and cannot be compared. The 4 differences
-  are NAP's fusion carbon and the hydroxyl of ETD, typed by hand with other
-  parameters. The polymer repeat units of the BHJ project (13 molecule types):
-  726 of 726 comparable atoms are equal;
-- the exact `opls_` number can differ where several types share their
-  parameters (the examples use `opls_139` for every alkane carbon, the rules
-  `opls_135`-`139` by number of hydrogens);
-- fed to `make_top`, the perceived types give the same bonds, angles,
-  dihedrals, pairs and exclusions as the hand-written topology (BTBT, DPP,
-  PNDI2OD);
-- the learned engine, tested by leaving a residue and its variants out of its
-  own training set, recovers the Lennard-Jones class of 93% of the OPLS-AA
-  atoms.
-
-Selenium and silicon are typed from the literature, as in your PBDTTT-Se and
-TIPS_PN topologies (`extra_types.py`: Se 78.971 u, sigma 0.37741 nm, epsilon
-1.21754 kJ/mol; Si 28.0855 u, 0.4184 nm, 0.295 kJ/mol, each with its reference).
-Any other element with no OPLS-AA type gets an atomtype whose sigma and epsilon
-read `FILL_ME`: `make_top` writes the topology with the marker, keeps
-`<name>_types.top` (the same with placeholder numbers), and tells you to fill in
-the two values and run `make_top -p <name>_types.top`. A group no rule covers
-is an error that names the atoms.
-Bond guessing is the one of `make_top`: in unrelaxed oligomers it can add a bond
-between an H and an S that touch (1.47 Angstrom), which makes the S untypeable:
-`make_top` then stops with an error that names the atom.
-
-**Not validated:** force fields other than OPLS-AA have no curated rules
-(`--ff amber99sb-ildn` runs on the learned engine alone and is far less
-reliable for anything outside the biomolecular templates); neutral molecules
-only; little testing outside the organic-semiconductor chemistry of the examples and
-QMD-FFs beyond the 31 small functional-group cases in `tests/`.
-
-```python
-from SelIntCoords.perceive_types import perceive_to_top
-
-top, assignments = perceive_to_top("BTBT.xyz", ff_name="oplsaa", class_name=True)   # as perceive_types
-assignments[0].type, assignments[0].rule      # ('opls_633', 'aromatic S')
-```
-
 ## map_atoms and renumber_top
 
 A force field is built on one geometry, but a crystal structure numbers
@@ -386,8 +373,8 @@ It refuses a map that misses atoms or is not a bijection, since that would
 silently corrupt the topology (`--allow-partial` overrides, at your risk).
 
 ```bash
-map_atoms -r crystal.xyz -t BTBT.xyz -m map.txt [-o reordered.xyz] [-v]
-renumber_top -p BTBT_symm.top -m map.txt [-o out.top] [-n MOL_INDEX] [--allow-partial] [-v]
+map_atoms -r crystal.xyz -t molecule.xyz -m map.txt [-o reordered.xyz] [-v]
+renumber_top -p molecule.top -m map.txt [-o out.top] [-n MOL_INDEX] [--allow-partial] [-v]
 ```
 
 `map.txt` has two columns, `reference target`, 1-based.
@@ -407,7 +394,7 @@ both read it identically:
   refused (`ChargeOverrideError`) instead of changing the energy.
 
 ```bash
-joyce_to_openmm -p BTBT_symm.top -o out_dir/ [-v]
+joyce_to_openmm -p molecule.top -o out_dir/ [-v]
 ```
 
 The converted file can be *read* by both programs, which is not the same
@@ -427,8 +414,8 @@ on 18 systems (about 20 to 146 000 atoms).
 ```python
 from SelIntCoords.openmm_compat import load_top, single_point_energy
 
-topology, system, offset = load_top("BTBT_symm.top", "BTBT.gro")
-energy, offset = single_point_energy("BTBT_symm.top", "BTBT.gro")
+topology, system, offset = load_top("molecule.top", "molecule.gro")
+energy, offset = single_point_energy("molecule.top", "molecule.gro")
 ```
 
 ## Python API
@@ -474,12 +461,13 @@ examples README lists the number of terms found for each.
 
 | Module | Role |
 |---|---|
-| `sel_intcoords.py` | enumerate internal coordinates; symmetry and ring equivalences |
-| `dihed_deps.py` | stiff coordinates that share a force constant because they sit in the same ring |
-| `symmetry.py` | atoms equivalent by the symmetry of the bond graph (what `make_top` uses), and by the point group of a geometry (a library function, no external program) |
-| `ring_groups.py` | ring systems, their names, and the grouping of coordinates under headers |
-| `flex_classes.py` | kind of each rotatable bond: methyl, scanned single bond, double bond, other |
 | `mol_features.py`, `oplsaa_rules.py`, `learned_types.py`, `ffdb.py`, `extra_types.py`, `perceive_types.py` | [atom type perception](#atom-type-perception) |
+| `sel_intcoords.py` | bonds, rings, angles, dihedrals, impropers, 1-n pairs and exclusions; stiff or flexible |
+| `symmetry.py` | atoms equivalent by the symmetry of the bond graph (what `make_top` uses), and by the point group of a geometry (a library function, no external program) |
+| `flex_classes.py` | kind of each rotatable bond: methyl, scanned single bond, double bond, other |
+| `ring_groups.py` | ring systems, their names, and the grouping of coordinates under headers |
+| `pair_selection.py` | which 1,5-or-farther pairs a conformer of the rigid-rotor model brings into contact |
+| `dihed_deps.py` | stiff coordinates that share a force constant because they sit in the same ring |
 | `make_top.py` | `make_top` CLI: assemble topology, `$dependence` file, CSV |
 | `map_atoms.py` | `map_atoms` CLI: graph isomorphism + RMSD atom mapping |
 | `renumber.py` | `renumber_top` CLI |
@@ -489,7 +477,7 @@ examples README lists the number of terms found for each.
 
 ## When something goes wrong
 
-- **`make_top` finds fewer (or more) equivalent coordinates than expected**: the symmetry is searched with a 0.01 Angstrom tolerance (`get_equivalent_atoms(u, tol=...)`); a geometry that is only approximately symmetric needs a larger one.
+- **`make_top` finds fewer (or more) equivalent coordinates than expected**: equivalence comes from the bond graph and the atom types, not from the geometry: atoms of different atom type are never equivalent, so check the types in the `.types` report and the guessed bonds.
 - **`map_atoms` says the graphs are not isomorphic**: the two files are different molecules, or bond guessing differs because one geometry is too distorted; compare the bond counts.
 - **`map_atoms` is slow**: many symmetric groups mean many isomorphisms; run with `-v`.
 - **`renumber_top` raises "not a bijection"**: the map has duplicate numbers; regenerate it with `map_atoms`.
