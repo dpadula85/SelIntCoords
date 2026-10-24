@@ -85,15 +85,80 @@ they are, and the topology is `BTBT.new.top` (there is an older one to tell it f
 
 `-l` picks the mixing rule for the pair parameters: geometric (default)
 or arithmetic. Output, next to `-o`: the topology, a `_deps.dat` in Joyce's
-`$dependence` format (each coordinate is tied once, to the lowest index of its class of equivalent coordinates), and a `.csv` with the
-number of each term and its index range in the topology.
+`$dependence` format, and a `.csv` with the number of each term and its index range in the topology.
 
-The ties are the coordinates equivalent by the symmetry of the bond graph (atom types count), and the stiff coordinates of one ring:
-all torsions of a ring (those with hydrogen apart) share one force constant, rings equivalent by symmetry share it too, and the
-starlike impropers at ring atoms are five times the torsions of their ring. Fitted separately, the six torsions of a planar ring
-are not independent and Joyce returns negative force constants: on MphS-C2, Step1 with the symmetry ties alone gave 27 of 168 below
-zero (down to -171 kJ/mol); with the ring ties none, range 11-430 kJ/mol, the Hessian deviation 1% higher. Each line of `_deps.dat`
-ends with a short `;` comment: the two coordinates and why (`symm eq`, `same k in ring ...`, or `oop ..., 5x k`).
+### What make_top does, step by step
+
+The rules in the order they are applied. Each step uses only what the steps above it produced, and
+the later sections of this README give the details.
+
+1. **Atom types.** Perceived from the geometry ([below](#atom-type-perception)) or read from `-p`.
+   They give the Lennard-Jones parameters and tell atoms apart: two atoms of different type are never
+   equivalent.
+2. **Bonds.** Guessed from the distances between atoms. From here on the molecule is a graph: atoms
+   are nodes, bonds are edges. Almost every rule below looks at the graph, not at the coordinates.
+3. **Rings.** The smallest set of rings of the graph. A *ring system* is a set of rings that share a
+   bond (fused rings are one system).
+4. **Equivalent atoms.** Two atoms are equivalent when the graph can be relabelled, keeping every
+   element and atom type, so that one lands on the other: the three H of a methyl, the two halves of a
+   symmetric molecule. This depends on the bonds and types only, not on the conformation.
+5. **Coordinates.** Every bond; every angle (three bonded atoms in a row); every proper dihedral (four
+   bonded atoms in a row). For each *sp2 atom* (a heavy atom with fewer than four bonds that is not in a
+   saturated side chain) with three or more neighbours, one **improper** (`starlike`): the atom and its
+   neighbours, there to keep the atom planar.
+6. **Stiff or flexible.** A proper dihedral is *stiff* when its two central atoms are sp2 and in the same
+   ring. Each ring torsion exists twice (near 0 and near 180 degrees): the one within 15 degrees of 0 is
+   kept. Every other proper dihedral is *flexible*.
+7. **Kind of each flexible dihedral**, by the bond it turns about; the first rule that fits wins
+   ([table](#rotatable-bonds)):
+   1. a methyl: three H-C-X-Y dihedrals, parameters fixed from the literature;
+   2. a ring bond that is not part of the planar framework: literature parameters;
+   3. a double bond: stiff if an atom is in a ring, otherwise a rotor fitted to a scan (`phi`);
+   4. a single bond between two rigid units: a rotor fitted to a scan (`delta`);
+   5. the first bond of a side chain (aryl-S-CH3, ring-CH2-CH3, N-CH2-CH3): a rotor fitted to a scan,
+      numbered after the ones in 4 (`delta`);
+   6. anything else: left with zero parameters for you.
+
+   Of the dihedrals about one scanned bond one is kept, and bonds that are equivalent by symmetry share it.
+8. **Order.** Bonds, angles and stiff dihedrals are grouped by ring system under a header
+   ([grouping](#grouping-by-ring-system)); then the impropers; then the flexible dihedrals, methyls first,
+   then the scanned ones. The numbers are fixed *now*, so the dependencies refer to the order of the file.
+9. **Pairs and exclusions.** All pairs of atoms are excluded, so that only the `[ pairs ]` lines written
+   act. The 1,4 pairs are not written (the dihedral covers them); the others are chosen by twisting the
+   molecule ([pairs](#which-pairs-are-written)). All parameters are zero, for Joyce to fit, except the
+   methyl and ring-dihedral values of step 7 and the pair parameters (mixing rule).
+10. **Dependencies** ([below](#dependencies)): which coordinates must share a force constant.
+
+### Dependencies
+
+`_deps.dat` tells Joyce which coordinates share a force constant. The rules, in the order applied:
+
+1. **Symmetry.** Two bonds, angles, dihedrals or impropers are tied when their atoms, position by
+   position, are equivalent atoms (step 4 above). Atom types count.
+2. **One parameter per ring.** The stiff coordinates (torsions and starlike impropers) of one ring are tied.
+   A coordinate belongs to the ring that holds the central bond of a torsion, or the centre of an improper
+   (the larger ring where two share the bond, then the lowest atoms). Rings equivalent by symmetry count as
+   one, and coordinates with a hydrogen are kept apart from those without.
+3. **Starlike impropers.** The impropers of a ring are five times the torsions of the same ring (same
+   hydrogen class).
+4. **One reference per class.** Ties chain together into classes; the coordinate with the lowest number is
+   the reference and every other member is tied to it, once.
+
+Rule 2 is there because the six torsions of a planar ring are not independent at the harmonic level (the
+Hessian fixes only their collective out-of-plane stiffness), so fitted separately Joyce splits it with arbitrary
+signs. On MphS-C2, Step1 with the symmetry ties alone gave 27 of 168 stiff force constants below zero (down to
+-171 kJ/mol); with the ring ties none, range 11-430 kJ/mol, and the Hessian deviation 1 % higher.
+
+Each line ends with a `;` comment saying what is tied and why:
+
+```
+  7 =   1*1.d0 ; bond 4-5 = bond 1-2 (CA1-CA2): symm eq
+364 = 363*1.d0 ; dihed 1-2-3-4 (CA1-CA2-CA1-CA1) = dihed 6-1-2-3 (CA1-CA1-CA2-CA1): same k in ring 1-2-3-4-5-6
+479 = 363*5.d0 ; star 1-2-6-19 (CA1-CA2-CA1-CA1) = dihed 6-1-2-3 (CA1-CA1-CA2-CA1): oop in ring 1-2-3-4-5-6, 5x k
+```
+
+`symm eq` is symmetry (rule 1), `same k in ring` rule 2, `oop` (out-of-plane) rule 3, `k` the force constant; `dihed`
+is a stiff dihedral, `star` a starlike improper.
 
 ### Which pairs are written
 
