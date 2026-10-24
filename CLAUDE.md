@@ -34,7 +34,7 @@ oligomers/polymers.
   geometry tolerance; on 8 example molecules it loses no dependency of the former point-group + local-hydrogen
   rule and adds some on ZR1, DPP, rPSB11 where the geometry is not symmetric; his hand ties of the 11-cis retinal
   PSB are reproduced exactly; `symmetry.equivalent_atoms`, the point group within 0.01 A, stays as a library function
-  that make_top no longer calls) and ring symmetry equivalence (`dihed_deps.py`). Writes: the completed `.top`, a
+  that make_top no longer calls) and ring ties (`dihed_deps.ring_class_groups`: stiff coordinates of one ring, hydrogen ones apart, rings equivalent by symmetry together, starlike impropers x5 of their ring's torsions; without them Step1 gave negative torsion force constants). Writes: the completed `.top`, a
   `<stem>_deps.dat` (Joyce `$dependence 1.2` format; union-find over equivalent coordinates, each dependent listed once against the lowest index of its class), and a
   `<stem>.csv` coordinate-count summary (columns: `Type, Number, Start,
   End`).

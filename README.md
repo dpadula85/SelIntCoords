@@ -88,6 +88,12 @@ or arithmetic. Output, next to `-o`: the topology, a `_deps.dat` in Joyce's
 `$dependence` format (each coordinate is tied once, to the lowest index of its class of equivalent coordinates), and a `.csv` with the
 number of each term and its index range in the topology.
 
+The ties are the coordinates equivalent by the symmetry of the bond graph (atom types count), and the stiff coordinates of one ring:
+all torsions of a ring (those with hydrogen apart) share one force constant, rings equivalent by symmetry share it too, and the
+starlike impropers at ring atoms are five times the torsions of their ring. Fitted separately, the six torsions of a planar ring
+are not independent and Joyce returns negative force constants: on MphS-C2, Step1 with the symmetry ties alone gave 27 of 168 below
+zero (down to -171 kJ/mol); with the ring ties none, range 11-430 kJ/mol, the Hessian deviation 1% higher.
+
 ### Which pairs are written
 
 A topology made for Joyce excludes every non-bonded pair inside the molecule, so two atoms without a
@@ -403,7 +409,7 @@ examples README lists the number of terms found for each.
 | Module | Role |
 |---|---|
 | `sel_intcoords.py` | enumerate internal coordinates; symmetry and ring equivalences |
-| `dihed_deps.py` | group stiff ring dihedrals that share a force constant |
+| `dihed_deps.py` | stiff coordinates that share a force constant because they sit in the same ring |
 | `symmetry.py` | atoms equivalent by the symmetry of the bond graph (what `make_top` uses), and by the point group of a geometry (a library function, no external program) |
 | `ring_groups.py` | ring systems, their names, and the grouping of coordinates under headers |
 | `flex_classes.py` | kind of each rotatable bond: methyl, scanned single bond, double bond, other |

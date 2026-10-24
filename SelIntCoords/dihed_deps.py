@@ -5,7 +5,13 @@ dihed_deps - group the stiff (ring) proper dihedrals that must share a force
 constant, as Joyce $dependence entries.
 '''
 
+from collections import defaultdict
+
+import networkx as nx
 import numpy as np
+
+# out-of-plane (starlike) impropers at a ring atom are stiffer than the ring torsions
+STARLIKE_FACTOR = 5
 
 
 def get_ring_stiff_dihedral_equivalencies(stiff, rings):
@@ -152,6 +158,72 @@ def find_stiff_dihedral_deps(stiff, rings):
                 dihedral_deps.append([dependent, independent])
     
     return np.array(dihedral_deps) if dihedral_deps else np.empty((0, 2))
+
+
+def _starlike_centre(graph, atoms):
+    '''The atom bonded to the three others of a four-atom coordinate, or None.'''
+
+    for c in atoms:
+        if all(graph.has_edge(c, x) for x in atoms if x != c):
+            return c
+    return None
+
+
+def ring_class_groups(graph, elements, orbit, coords):
+    '''
+    Stiff coordinates (proper dihedrals and starlike impropers) that share a
+    force constant because they sit in the same ring.
+
+    The six torsions of a planar ring are not independent at the harmonic
+    level (only the collective out-of-plane stiffness is fixed by the
+    Hessian), so fitted separately they split it with arbitrary signs, and
+    force constants below zero appear. One parameter per ring removes this.
+    A coordinate belongs to the ring that holds the central bond of a proper
+    dihedral, or the centre of a starlike improper (the larger ring, then the
+    lowest atoms, where two rings share the bond); rings equivalent by the
+    graph symmetry share their parameter. Coordinates with hydrogen are kept
+    apart from those without, and the starlike ones are tied to the proper
+    dihedrals of their ring with a factor (STARLIKE_FACTOR).
+
+    Parameters
+    ----------
+    graph: nx.Graph
+        Bond graph, nodes are atom indices.
+    elements: sequence of str
+        Element of each atom.
+    orbit: sequence of int
+        Label of the class of equivalent atoms of each atom.
+    coords: np.ndarray (shape: (N, 4))
+        Proper dihedrals and starlike impropers, as atom indices.
+
+    Returns
+    -------
+    groups: list of list
+        Indices into `coords` that share one force constant.
+    links: list of tuple
+        (index of a starlike coordinate, index of a proper dihedral of the
+        same ring) pairs: the first class is STARLIKE_FACTOR times the second.
+    '''
+
+    rings = [ tuple(sorted(r)) for r in nx.minimum_cycle_basis(graph) ]
+    proper = defaultdict(list)
+    starlike = defaultdict(list)
+    for n, atoms in enumerate(np.asarray(coords).reshape(-1, 4)):
+        atoms = [ int(a) for a in atoms ]
+        centre = _starlike_centre(graph, atoms)
+        if centre is not None:
+            holders = [ r for r in rings if centre in r ]
+        else:
+            holders = [ r for r in rings if atoms[1] in r and atoms[2] in r and graph.has_edge(atoms[1], atoms[2]) ]
+        if not holders:
+            continue
+        ring = max(holders, key=lambda r: (len(r), [ -a for a in r ]))
+        key = (tuple(sorted(orbit[a] for a in ring)), any(elements[a] == 'H' for a in atoms))
+        (proper if centre is None else starlike)[key].append(n)
+
+    groups = list(proper.values()) + list(starlike.values())
+    links = [ (idxs[0], proper[key][0]) for key, idxs in starlike.items() if key in proper ]
+    return groups, links
 
 
 if __name__ == '__main__':

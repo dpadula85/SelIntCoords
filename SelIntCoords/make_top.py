@@ -28,9 +28,10 @@ from .pair_selection import (BUMP_RATIO, FRACTION, append_commented_pairs, find_
 from .ring_groups import RingGrouper, insert_headers
 from .symmetry import topological_classes
 from .dihed_deps import (
+        STARLIKE_FACTOR,
         get_ring_stiff_dihedral_equivalencies,
         integrate_ring_dihedral_equivalencies,
-        find_stiff_dihedral_deps
+        ring_class_groups
     )
 
 # Default bond parameters
@@ -594,9 +595,6 @@ def main():
     # NEW: Get ring-based stiff dihedral equivalencies
     enhanced_eq, ring_dih_info = integrate_ring_dihedral_equivalencies(eq, stiff, rings)
 
-    # Get specific stiff dihedral dependencies for ring dihedrals
-    stiff_ring_deps = find_stiff_dihedral_deps(stiff, rings)
-
     # Create Topology (unchanged)
     topobj = add_terms(
             topfile,
@@ -682,15 +680,6 @@ def main():
     # with the new ring-based equivalencies
     stiff_eqs = find_deps(stiff, eq)  # Original symmetry-based equivalencies
 
-    # Add ring-based stiff dihedral dependencies
-    if stiff_ring_deps.size > 0:
-        # Convert stiff_ring_deps to the same format as other equivalencies
-        # (add 1 to convert from 0-based to 1-based indexing if needed)
-        if stiff_eqs.size > 0:
-            stiff_eqs = np.vstack([stiff_eqs, stiff_ring_deps + 1])
-        else:
-            stiff_eqs = stiff_ring_deps + 1
-
     imp_eqs = find_deps(impdiheds, eq)  # Original function for impropers
     flex_eqs = find_deps(flex, eq)      # Original function for flexible dihedrals
 
@@ -702,6 +691,14 @@ def main():
     imp_eqs += 1 + (df[df["Type"] == "Stiff_dihedrals"]["End"]).values
     flex_eqs += 1 + (df[df["Type"] == "Impropers"]["End"]).values
 
+    # Stiff coordinates of one ring share a force constant (starlike ones in a fixed ratio)
+    ring_groups, ring_links = ring_class_groups(
+        feats.graph, feats.el, [ min([ i ] + [ int(x) for x in eq[i] ]) for i in range(feats.n) ],
+        np.vstack([ stiff, impdiheds.reshape(-1, 4) ]))
+    first_stiff = int(df[df["Type"] == "Angles"]["End"].values[0]) + 1       # global number of coordinate 0
+    ring_pairs = np.array([ [ g[0] + first_stiff, i + first_stiff ] for g in ring_groups for i in g[1:] ], dtype=int)
+    ring_pairs = ring_pairs.reshape(-1, 2)
+
     # Merge dependencies
     arrs = [
         bds_eqs,
@@ -711,12 +708,10 @@ def main():
         flex_eqs
     ]
 
+    deps = ring_pairs
     for arr in arrs:
         if arr.shape[0] > 1:
-            try:
-                deps = np.r_[ deps, arr ]
-            except:
-                deps = arr
+            deps = np.r_[ deps, arr.astype(int) ]
 
     # Equivalent coordinates form classes (union-find over the pairs); the lowest index of a class is the
     # reference and every other member depends on it, once
@@ -734,18 +729,28 @@ def main():
         if a != b:
             parent[max(a, b)] = min(a, b)
 
-    deps_dict = {}
+    classes = {}
     for x in sorted(parent):
-        if root(x) != x:
-            deps_dict.setdefault(root(x), []).append(x)
-    deps_dict = dict(sorted(deps_dict.items()))
+        classes.setdefault(root(x), []).append(x)
+    # a starlike class is tied to the proper dihedrals of its ring in a fixed ratio
+    factor = {}
+    for star, proper in ring_links:
+        star, proper = root(star + first_stiff), root(proper + first_stiff)
+        for x in classes.get(star, [ star ]):
+            factor[x] = (proper, STARLIKE_FACTOR)
 
     # Write dependencies in Joyce format
+    ties = []
+    for ref, members in classes.items():
+        for x in members:
+            if x in factor:
+                ties.append((x, ) + factor[x])
+            elif x != ref:
+                ties.append((x, ref, 1))
     with open(outdeps, "w") as f:
         f.write("$dependence 1.2\n")
-        for k, v in deps_dict.items():
-            for vv in v:
-                f.write("%5d = %5d*1.d0 ;\n" % (vv, k))
+        for x, ref, fac in sorted(ties, key=lambda tie: (tie[1], tie[0])):
+            f.write("%5d = %5d*%d.d0 ;\n" % (x, ref, fac))
         f.write("$end")
 
     return
