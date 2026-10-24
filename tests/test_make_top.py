@@ -80,6 +80,10 @@ def test_dependence_file_ties_each_coordinate_once_to_the_lowest_of_its_class(na
     # a reference is never itself tied, and sits below everything that depends on it
     assert not {b for _, b in ties} & set(dependents)
     assert all(b < a for a, b in ties)
+    # every tie says what it is and why
+    lines = [line for line in (tmp_path / f"{name}_deps.dat").read_text().split("\n") if "=" in line]
+    assert all(" ; " in line and ": " in line.split(" ; ")[1] for line in lines)
+    assert any("equivalent by the symmetry" in line for line in lines) and any("ring" in line for line in lines)
 
 
 def test_make_top_cli_with_symmetry(examples, tmp_path):

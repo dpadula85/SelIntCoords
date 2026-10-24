@@ -28,10 +28,12 @@ from .pair_selection import (BUMP_RATIO, FRACTION, append_commented_pairs, find_
 from .ring_groups import RingGrouper, insert_headers
 from .symmetry import topological_classes
 from .dihed_deps import (
-        STARLIKE_FACTOR,
         get_ring_stiff_dihedral_equivalencies,
         integrate_ring_dihedral_equivalencies,
-        ring_class_groups
+        ring_class_groups,
+        ring_of_coordinate,
+        smallest_rings,
+        tie_dependencies
     )
 
 # Default bond parameters
@@ -564,7 +566,8 @@ def main():
                       out_stem + '_types.top'))
 
     # Get internal coordinates and other information from geometry
-    data = list_intcoords(Opts['MolFile'], atom_types=[ a.atomtype for a in TOP(topfile).molecules[0].atoms ])
+    atom_types = [ a.atomtype for a in TOP(topfile).molecules[0].atoms ]
+    data = list_intcoords(Opts['MolFile'], atom_types=atom_types)
     bds, angles, stiff, impdiheds, flex, LJs, excls, rings, eq = data
 
     # Treat each rotatable bond as done by hand: methyl rotors take literature
@@ -692,14 +695,15 @@ def main():
     flex_eqs += 1 + (df[df["Type"] == "Impropers"]["End"]).values
 
     # Stiff coordinates of one ring share a force constant (starlike ones in a fixed ratio)
+    rings_min = smallest_rings(feats.graph)
+    stiff_set = np.vstack([ stiff, impdiheds.reshape(-1, 4) ])
     ring_groups, ring_links = ring_class_groups(
         feats.graph, feats.el, [ min([ i ] + [ int(x) for x in eq[i] ]) for i in range(feats.n) ],
-        np.vstack([ stiff, impdiheds.reshape(-1, 4) ]))
+        stiff_set, rings_min)
     first_stiff = int(df[df["Type"] == "Angles"]["End"].values[0]) + 1       # global number of coordinate 0
     ring_pairs = np.array([ [ g[0] + first_stiff, i + first_stiff ] for g in ring_groups for i in g[1:] ], dtype=int)
     ring_pairs = ring_pairs.reshape(-1, 2)
 
-    # Merge dependencies
     arrs = [
         bds_eqs,
         ang_eqs,
@@ -707,50 +711,30 @@ def main():
         imp_eqs,
         flex_eqs
     ]
+    symmetry_pairs = np.vstack([ arr.astype(int) for arr in arrs if arr.shape[0] > 1 ] + [ np.empty((0, 2), dtype=int) ])
+    ties = tie_dependencies(symmetry_pairs, ring_pairs, ring_links, first_stiff)
 
-    deps = ring_pairs
-    for arr in arrs:
-        if arr.shape[0] > 1:
-            deps = np.r_[ deps, arr.astype(int) ]
+    # Write dependencies in Joyce format, each with what it is and why
+    coordinates = ([ ('bond', c) for c in bds ] + [ ('angle', c) for c in angles ] + [ ('dihedral', c) for c in stiff ]
+                   + [ ('improper', c) for c in impdiheds.reshape(-1, 4) ] + [ ('flexible dihedral', c) for c in flex ])
 
-    # Equivalent coordinates form classes (union-find over the pairs); the lowest index of a class is the
-    # reference and every other member depends on it, once
-    parent = {}
+    def describe(number):
+        kind, atoms = coordinates[number - 1]
+        return '%s %s (%s)' % (kind, '-'.join(str(int(a) + 1) for a in atoms), '-'.join(atom_types[int(a)] for a in atoms))
 
-    def root(x):
-        parent.setdefault(x, x)
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
+    def reason(dependent, reference, factor, why):
+        if why == 'symmetry':
+            return 'equivalent by the symmetry of the bond graph'
+        ring = ring_of_coordinate(feats.graph, rings_min, coordinates[dependent - 1][1])
+        in_ring = 'ring ' + '-'.join(str(a + 1) for a in ring) if ring is not None else 'a ring'
+        if why == 'ring':
+            return 'same force constant for the stiff coordinates of %s, and of the rings equivalent to it' % in_ring
+        return 'out-of-plane at an atom of %s: %d times the torsions of the ring' % (in_ring, factor)
 
-    for a, b in deps:
-        a, b = root(int(a)), root(int(b))
-        if a != b:
-            parent[max(a, b)] = min(a, b)
-
-    classes = {}
-    for x in sorted(parent):
-        classes.setdefault(root(x), []).append(x)
-    # a starlike class is tied to the proper dihedrals of its ring in a fixed ratio
-    factor = {}
-    for star, proper in ring_links:
-        star, proper = root(star + first_stiff), root(proper + first_stiff)
-        for x in classes.get(star, [ star ]):
-            factor[x] = (proper, STARLIKE_FACTOR)
-
-    # Write dependencies in Joyce format
-    ties = []
-    for ref, members in classes.items():
-        for x in members:
-            if x in factor:
-                ties.append((x, ) + factor[x])
-            elif x != ref:
-                ties.append((x, ref, 1))
     with open(outdeps, "w") as f:
         f.write("$dependence 1.2\n")
-        for x, ref, fac in sorted(ties, key=lambda tie: (tie[1], tie[0])):
-            f.write("%5d = %5d*%d.d0 ;\n" % (x, ref, fac))
+        for x, ref, fac, why in ties:
+            f.write("%5d = %5d*%d.d0 ; %s = %s: %s\n" % (x, ref, fac, describe(x), describe(ref), reason(x, ref, fac, why)))
         f.write("$end")
 
     return

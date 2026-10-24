@@ -160,6 +160,12 @@ def find_stiff_dihedral_deps(stiff, rings):
     return np.array(dihedral_deps) if dihedral_deps else np.empty((0, 2))
 
 
+def smallest_rings(graph):
+    '''Rings of the graph (a smallest set), each a sorted tuple of atoms.'''
+
+    return [ tuple(sorted(r)) for r in nx.minimum_cycle_basis(graph) ]
+
+
 def _starlike_centre(graph, atoms):
     '''The atom bonded to the three others of a four-atom coordinate, or None.'''
 
@@ -169,7 +175,25 @@ def _starlike_centre(graph, atoms):
     return None
 
 
-def ring_class_groups(graph, elements, orbit, coords):
+def ring_of_coordinate(graph, rings, atoms):
+    '''
+    The ring a stiff coordinate belongs to, or None: the ring that holds the
+    central bond of a proper dihedral, or the centre of a starlike improper;
+    the larger ring, then the lowest atoms, where two rings share the bond.
+    '''
+
+    atoms = [ int(a) for a in atoms ]
+    centre = _starlike_centre(graph, atoms)
+    if centre is not None:
+        holders = [ r for r in rings if centre in r ]
+    else:
+        holders = [ r for r in rings if atoms[1] in r and atoms[2] in r and graph.has_edge(atoms[1], atoms[2]) ]
+    if not holders:
+        return None
+    return max(holders, key=lambda r: (len(r), [ -a for a in r ]))
+
+
+def ring_class_groups(graph, elements, orbit, coords, rings=None):
     '''
     Stiff coordinates (proper dihedrals and starlike impropers) that share a
     force constant because they sit in the same ring.
@@ -195,6 +219,8 @@ def ring_class_groups(graph, elements, orbit, coords):
         Label of the class of equivalent atoms of each atom.
     coords: np.ndarray (shape: (N, 4))
         Proper dihedrals and starlike impropers, as atom indices.
+    rings: list of tuple, optional
+        Smallest rings of the graph (found if not given).
 
     Returns
     -------
@@ -205,25 +231,85 @@ def ring_class_groups(graph, elements, orbit, coords):
         same ring) pairs: the first class is STARLIKE_FACTOR times the second.
     '''
 
-    rings = [ tuple(sorted(r)) for r in nx.minimum_cycle_basis(graph) ]
+    if rings is None:
+        rings = smallest_rings(graph)
     proper = defaultdict(list)
     starlike = defaultdict(list)
     for n, atoms in enumerate(np.asarray(coords).reshape(-1, 4)):
-        atoms = [ int(a) for a in atoms ]
-        centre = _starlike_centre(graph, atoms)
-        if centre is not None:
-            holders = [ r for r in rings if centre in r ]
-        else:
-            holders = [ r for r in rings if atoms[1] in r and atoms[2] in r and graph.has_edge(atoms[1], atoms[2]) ]
-        if not holders:
+        ring = ring_of_coordinate(graph, rings, atoms)
+        if ring is None:
             continue
-        ring = max(holders, key=lambda r: (len(r), [ -a for a in r ]))
+        atoms = [ int(a) for a in atoms ]
         key = (tuple(sorted(orbit[a] for a in ring)), any(elements[a] == 'H' for a in atoms))
-        (proper if centre is None else starlike)[key].append(n)
+        (proper if _starlike_centre(graph, atoms) is None else starlike)[key].append(n)
 
     groups = list(proper.values()) + list(starlike.values())
     links = [ (idxs[0], proper[key][0]) for key, idxs in starlike.items() if key in proper ]
     return groups, links
+
+
+def tie_dependencies(symmetry_pairs, ring_pairs, links, first_stiff):
+    '''
+    Dependent coordinates, each tied once to the lowest index of its class.
+
+    Parameters
+    ----------
+    symmetry_pairs: np.ndarray (shape: (N, 2))
+        Pairs of coordinate numbers (global, 1-based) that are equivalent by symmetry.
+    ring_pairs: np.ndarray (shape: (M, 2))
+        Pairs of coordinate numbers that share a force constant because they sit in the same ring.
+    links: list of tuple
+        (starlike index, proper dihedral index) from `ring_class_groups`, relative to `first_stiff`.
+    first_stiff: int
+        Global number of coordinate 0 of the stiff and starlike set.
+
+    Returns
+    -------
+    ties: list of tuple
+        (dependent, reference, factor, reason), sorted by reference, with reason 'symmetry' (the two are
+        equivalent by symmetry), 'ring' (same ring, or equivalent rings) or 'starlike' (factor times the
+        torsions of the ring).
+    '''
+
+    def union_find(pairs):
+        parent = {}
+
+        def root(x):
+            parent.setdefault(x, x)
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        for a, b in pairs:
+            a, b = root(int(a)), root(int(b))
+            if a != b:
+                parent[max(a, b)] = min(a, b)
+        return root, parent
+
+    symmetry_root, _ = union_find(symmetry_pairs)
+    root, parent = union_find(list(map(tuple, symmetry_pairs)) + list(map(tuple, ring_pairs)))
+    for star, _ in links:
+        root(star + first_stiff)                       # a starlike coordinate alone in its class is still tied
+    classes = {}
+    for x in sorted(parent):
+        classes.setdefault(root(x), []).append(x)
+
+    # a starlike class is tied to the proper dihedrals of its ring in a fixed ratio
+    linked = {}
+    for star, proper in links:
+        star, proper = root(star + first_stiff), root(proper + first_stiff)
+        for x in classes.get(star, [ star ]):
+            linked[x] = proper
+
+    ties = []
+    for ref, members in classes.items():
+        for x in members:
+            if x in linked:
+                ties.append((x, linked[x], STARLIKE_FACTOR, 'starlike'))
+            elif x != ref:
+                ties.append((x, ref, 1, 'symmetry' if symmetry_root(x) == symmetry_root(ref) else 'ring'))
+    return sorted(ties, key=lambda tie: (tie[1], tie[0]))
 
 
 if __name__ == '__main__':

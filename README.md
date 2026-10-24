@@ -92,7 +92,8 @@ The ties are the coordinates equivalent by the symmetry of the bond graph (atom 
 all torsions of a ring (those with hydrogen apart) share one force constant, rings equivalent by symmetry share it too, and the
 starlike impropers at ring atoms are five times the torsions of their ring. Fitted separately, the six torsions of a planar ring
 are not independent and Joyce returns negative force constants: on MphS-C2, Step1 with the symmetry ties alone gave 27 of 168 below
-zero (down to -171 kJ/mol); with the ring ties none, range 11-430 kJ/mol, the Hessian deviation 1% higher.
+zero (down to -171 kJ/mol); with the ring ties none, range 11-430 kJ/mol, the Hessian deviation 1% higher. Each line of `_deps.dat`
+ends with a `;` comment saying which coordinates are tied and why (symmetry, same ring, or the starlike factor).
 
 ### Which pairs are written
 

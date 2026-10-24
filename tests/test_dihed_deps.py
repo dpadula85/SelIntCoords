@@ -2,7 +2,7 @@
 import networkx as nx
 import numpy as np
 
-from SelIntCoords.dihed_deps import ring_class_groups
+from SelIntCoords.dihed_deps import ring_class_groups, tie_dependencies
 
 
 def benzene():
@@ -69,3 +69,12 @@ def test_fused_bond_goes_to_the_larger_ring():
     groups, _ = ring_class_groups(graph, ["C"] * 9, list(range(9)), np.array([(5, 0, 1, 2), (8, 0, 1, 6), (0, 1, 2, 3)]))
     # (5,0,1,2) and (0,1,2,3): central bonds 0-1 (shared) and 1-2 (six-ring) -> six-ring; (8,0,1,6): five-ring bond 0-1 too, larger ring wins
     assert sorted(map(sorted, groups)) == [[0, 1, 2]]
+
+
+def test_each_tie_says_why_and_is_written_once_against_the_lowest_index():
+    symmetry = np.array([[1, 2], [3, 4]])
+    rings = np.array([[2, 3], [10, 11]])
+    ties = tie_dependencies(symmetry, rings, [(5, 0)], first_stiff=10)
+    # 1~2 and 3~4 by symmetry, 2~3 by the ring: one class {1, 2, 3, 4}; 10~11 by the ring; the starlike 15 x5 to coordinate 10
+    assert ties == [(2, 1, 1, 'symmetry'), (3, 1, 1, 'ring'), (4, 1, 1, 'ring'), (11, 10, 1, 'ring'),
+                    (15, 10, 5, 'starlike')]
