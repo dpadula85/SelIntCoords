@@ -718,23 +718,34 @@ def main():
     coordinates = ([ ('bond', c) for c in bds ] + [ ('angle', c) for c in angles ] + [ ('dihedral', c) for c in stiff ]
                    + [ ('improper', c) for c in impdiheds.reshape(-1, 4) ] + [ ('flexible dihedral', c) for c in flex ])
 
+    kinds = { 'bond': 'bond', 'angle': 'angle', 'dihedral': 'dih', 'improper': 'imp', 'flexible dihedral': 'flex dih' }
+
+    kinds = { 'bond': 'bond', 'angle': 'angle', 'dihedral': 'dihed', 'improper': 'star', 'flexible dihedral': 'flex dihed' }
+
     def describe(number):
         kind, atoms = coordinates[number - 1]
-        return '%s %s (%s)' % (kind, '-'.join(str(int(a) + 1) for a in atoms), '-'.join(atom_types[int(a)] for a in atoms))
+        return (kinds[kind] + ' ' + '-'.join(str(int(a) + 1) for a in atoms),
+                '-'.join(atom_types[int(a)] for a in atoms))
 
-    def reason(dependent, reference, factor, why):
+    def reason(dependent, factor, why):
         if why == 'symmetry':
-            return 'equivalent by the symmetry of the bond graph'
+            return 'symm eq'
         ring = ring_of_coordinate(feats.graph, rings_min, coordinates[dependent - 1][1])
-        in_ring = 'ring ' + '-'.join(str(a + 1) for a in ring) if ring is not None else 'a ring'
+        in_ring = 'ring ' + '-'.join(str(a + 1) for a in ring) if ring is not None else 'ring'
         if why == 'ring':
-            return 'same force constant for the stiff coordinates of %s, and of the rings equivalent to it' % in_ring
-        return 'out-of-plane at an atom of %s: %d times the torsions of the ring' % (in_ring, factor)
+            return 'same k in %s' % in_ring
+        return 'oop in %s, %dx k' % (in_ring, factor)
+
+    def comment(x, ref, fac, why):
+        (name, types), (ref_name, ref_types) = describe(x), describe(ref)
+        coords = ('%s = %s (%s)' % (name, ref_name, types) if types == ref_types
+                  else '%s (%s) = %s (%s)' % (name, types, ref_name, ref_types))
+        return '%s: %s' % (coords, reason(x, fac, why))
 
     with open(outdeps, "w") as f:
         f.write("$dependence 1.2\n")
         for x, ref, fac, why in ties:
-            f.write("%5d = %5d*%d.d0 ; %s = %s: %s\n" % (x, ref, fac, describe(x), describe(ref), reason(x, ref, fac, why)))
+            f.write("%5d = %5d*%d.d0 ; %s\n" % (x, ref, fac, comment(x, ref, fac, why)))
         f.write("$end")
 
     return
