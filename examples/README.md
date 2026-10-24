@@ -33,26 +33,29 @@ Each run writes `<name>_symm.top`, `<name>_symm.csv` and
 ## What it produces
 
 Number of terms found (the `.csv`; its LJ rows count the pairs written). For `DPP` and `PNDI2OD` the
-bonded terms and exclusions are identical (ignoring comments) to those of the topology Joyce was
-started from. That topology listed every pair 1,5 or farther apart; `make_top` writes only the pairs
-that bump (BTBT 12, DPP 18, PNDI2OD 72) and lists the others commented out
-([which pairs](../README.md#which-pairs-are-written)). For `D18`
+bonds, angles, stiff dihedrals, impropers and exclusions are identical (ignoring comments) to those of
+the topology Joyce was started from. That topology listed every pair 1,5 or farther apart and every
+dihedral about the bonds of the side chains; `make_top` writes only the pairs that bump (BTBT 12, DPP 18,
+PNDI2OD 72), lists the others commented out ([which pairs](../README.md#which-pairs-are-written)), and
+keeps one dihedral per scanned side-chain bond. For `D18`
 and `PBDTTT-O` the bonds, angles, and stiff dihedrals plus impropers equal
 those of their final Joyce topology.
 
 | | Bonds | Angles | Stiff dihedrals | Flexible dihedrals | Impropers |
 |---|---|---|---|---|---|
-| BTBT | 39 | 68 | 34 | 30 | 14 |
+| BTBT | 39 | 68 | 34 | 20 | 14 |
 | DNBDT | 48 | 80 | 64 | 0 | 26 |
 | PN | 40 | 66 | 52 | 0 | 22 |
-| DPP | 51 | 88 | 46 | 38 | 20 |
-| PNDI2OD | 57 | 98 | 52 | 38 | 24 |
-| D18 | 97 | 167 | 84 | 80 | 36 |
-| PBDTTT-O | 69 | 118 | 54 | 60 | 25 |
+| DPP | 51 | 88 | 46 | 22 | 20 |
+| PNDI2OD | 57 | 98 | 52 | 22 | 24 |
+| D18 | 97 | 167 | 84 | 45 | 36 |
+| PBDTTT-O | 69 | 118 | 54 | 37 | 25 |
 
 `make_top` gives a starting topology that is meant to be edited. The
 flexible dihedrals are where the Joyce topologies of `D18` (81) and
-`PBDTTT-O` (67) were edited by hand; `DPP` kept the generated 38.
+`PBDTTT-O` (67) were edited by hand. Those starting files listed every dihedral
+about the bonds of the side chains; `make_top` keeps one per scanned bond, with the
+methyl rotations first and then `delta1`, `delta2`..., as in the ZR1 topology.
 
 ## Things to be careful of
 

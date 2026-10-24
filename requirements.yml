@@ -125,7 +125,6 @@ dependencies:
   - pip=24.0
   - pixman=0.43.2
   - prompt-toolkit=3.0.42
-  - psi4=1.9.1
   - psutil=5.9.8
   - pthread-stubs=0.4
   - ptyprocess=0.7.0
@@ -190,7 +189,6 @@ dependencies:
       - bibtexparser==1.4.1
       - charset-normalizer==3.3.2
       - idna==3.6
-      - pyscf==2.5.0
       - requests==2.31.0
       - urllib3==2.2.1
 prefix: /home/dpadula/software/anaconda3/envs/working

@@ -1,7 +1,7 @@
-"""symmetry: atoms equivalent by the point-group symmetry of a geometry.
+"""symmetry: atoms equivalent by the point-group symmetry of a geometry, and by the symmetry of the bond graph.
 
-The class counts of the example cores are those the previous detection
-(a symmetrised geometry through psi4 and pyscf's point-group search) gave.
+The point-group class counts of the example cores are those the first version of the detection gave (a
+symmetrised geometry through an external quantum-chemistry code).
 """
 import networkx as nx
 import numpy as np
@@ -9,7 +9,7 @@ import pytest
 
 from SelIntCoords.mol_features import read_xyz
 from SelIntCoords import sel_intcoords as si
-from SelIntCoords.symmetry import (atom_orbits, equivalent_atoms, graph_equivalences, pair_orbit_closure,
+from SelIntCoords.symmetry import (atom_orbits, automorphism_map, equivalent_atoms, graph_equivalences, pair_orbit_closure,
                                    symmetry_permutations)
 
 
@@ -145,3 +145,11 @@ def test_list_intcoords_equivalences_follow_the_graph(examples):
     types[22] = "special"
     eq = si.list_intcoords(str(examples / "DPP" / "DPP.xyz"), atom_types=types)[-1]
     assert eq[0].tolist() == [0]
+
+
+def test_automorphism_map_returns_the_image_of_every_atom():
+    graph = nx.path_graph(4)
+    adj = [sorted(graph.neighbors(i)) for i in range(4)]
+    assert automorphism_map(adj, [0, 0, 0, 0], [0, 1], [3, 2]) == {0: 3, 1: 2, 2: 1, 3: 0}
+    assert automorphism_map(adj, [0, 0, 0, 0], [0, 1], [2, 3]) is None
+    assert automorphism_map(adj, [0, 0, 0, 1], [0, 1], [3, 2]) is None

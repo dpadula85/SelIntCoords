@@ -16,6 +16,10 @@ a topology prepared for Joyce they are treated by kind of bond:
   linker): fitted to a scan of the rotation. One dihedral is kept, the one over the carbon
   skeleton when there is a choice, and starts with a single `n = 2` term
   (Joyce extends it);
+* first bond of a side chain, from a rigid unit to an sp3 atom that carries a heavy atom beyond it (aryl-S-CH3,
+  ring-CH2-CH3, N-CH2-CH3): fitted to a scan like the bonds above, numbered after them (`delta<N>` goes on:
+  ZR1 has d1-d4 for the bonds between rigid units and d5-d7 for these). One dihedral is kept, the one over
+  the heavy atoms. A group that turns as a unit (CF3, tert-butyl: three heavy atoms) is not a rotor of this kind;
 * double bond outside a ring (C=C, C=N) with no atom in a ring (the chain
   of a retinal): fitted to a scan like a single bond (`phi<N>` instead of
   `delta<N>`);
@@ -24,9 +28,8 @@ a topology prepared for Joyce they are treated by kind of bond:
   equilibrium value by a harmonic improper term;
 * bond in a ring that is not part of the planar framework (the sp3 carbons of
   a ring-locking cycle): literature parameters, like the methyl rotors;
-* any other rotor (a side chain whose far end has no ring or sp2 atom, as the
-  CH2 of an ethyl, Si methyls): left as it is, with null parameters, for the
-  chain merged by `oligomer_builder` or for the user.
+* any other rotor (the bonds of a side chain beyond the first, Si methyls): left as it is, with null
+  parameters, for the chain merged by `oligomer_builder` or for the user.
 '''
 
 import logging
@@ -37,6 +40,7 @@ import networkx as nx
 import numpy as np
 
 from .mol_features import Features
+from .symmetry import automorphism_map
 
 log = logging.getLogger(__name__)
 
@@ -179,8 +183,56 @@ def _joins_rigid_units(f: Features, j: int, k: int) -> bool:
     return all(any(_rigid_atom(f, i) for i in np.where(side)[0]) for side in rotor_sides(f.graph, (j, k)))
 
 
-def _numbered(diheds, prefix, eq):
-    '''Order rotors by bond and give equivalent bonds the same `<prefix>N` header.'''
+def _starts_side_chain(f: Features, j: int, k: int) -> bool:
+    '''
+    One end of the bond is a rigid atom and the other an sp3 atom with a heavy atom beyond it, not three
+    (CF3, tert-butyl): the first bond of a side chain, which turns the chain as a whole.
+    '''
+
+    for a, b in ((j, k), (k, j)):
+        if _rigid_atom(f, a) and not _rigid_atom(f, b):
+            heavy = [x for x in f.nbrs[b] if x != a and f.el[x] != 'H']
+            if 0 < len(heavy) < 3:
+                return True
+    return False
+
+
+def _carried_over(f: Features, chosen, by_bond, eq):
+    '''
+    Equivalent bonds take the same dihedral: the one of the first bond, carried over by a symmetry of the
+    bond graph (the two arms of a molecule are scanned once and keep the same atoms in the same roles).
+    '''
+
+    if not eq:
+        return list(chosen)
+    adj = [ sorted(f.graph.neighbors(v)) for v in range(f.n) ]
+    kinds = sorted(set(f.el))
+    colours = [ kinds.index(e) for e in f.el ]
+    out, reps = [], []
+    for d in sorted(chosen, key=lambda d: min(d[1], d[2])):
+        for rep in reps:
+            if _equivalent_bonds(eq, d, rep):
+                available = {tuple(x) for x in by_bond[tuple(sorted((d[1], d[2])))]}
+                for targets in ([d[1], d[2]], [d[2], d[1]]):
+                    image = automorphism_map(adj, colours, [rep[1], rep[2]], targets)
+                    if image is None:
+                        continue
+                    moved = tuple(image[x] for x in rep)
+                    if moved in available or moved[::-1] in available:
+                        d = list(moved if moved in available else moved[::-1])
+                        break
+                break
+        else:
+            reps.append(d)
+        out.append(d)
+    return out
+
+
+def _numbered(diheds, prefix, eq, first=1):
+    '''
+    Order rotors by bond and give equivalent bonds the same `<prefix>N` header, N counting from `first`.
+    Returns the rotors, their headers and the next free number.
+    '''
 
     diheds = sorted(diheds, key=lambda d: min(d[1], d[2]))
     reps: List[Sequence[int]] = []
@@ -192,18 +244,19 @@ def _numbered(diheds, prefix, eq):
         else:
             reps.append(d)
             n = len(reps) - 1
-        numbers.append(n + 1)
+        numbers.append(n + first)
     ranked = sorted(range(len(diheds)), key=lambda n: (numbers[n], n))
-    return [diheds[n] for n in ranked], ['%s%d' % (prefix, numbers[n]) for n in ranked]
+    return [diheds[n] for n in ranked], ['%s%d' % (prefix, numbers[n]) for n in ranked], first + len(reps)
 
 
 def _scan_choice(f: Features, dihedrals: Sequence[Sequence[int]]) -> Sequence[int]:
-    '''The dihedral over the sp2 carbon skeleton, ties broken by atom index.'''
+    '''The dihedral over the sp2 carbon skeleton, a carbon with a hydrogen preferred, ties broken by atom index.'''
 
     def cost(atom):
         if f.el[atom] == 'H':
             return 3
-        return (0 if f.el[atom] == 'C' else 1) + (0 if f.planar(atom) else 0.5)
+        # the skeleton carbon, in a planar unit, with a hydrogen on it when there is a choice
+        return (0 if f.el[atom] == 'C' else 1) + (0 if f.planar(atom) else 0.5) - (0.25 if f.n_h(atom) else 0.0)
 
     return min(dihedrals, key=lambda d: (cost(d[0]) + cost(d[3]), d[0], d[3]))
 
@@ -231,7 +284,7 @@ def classify_flex(f: Features, flex: np.ndarray, eq: Optional[Dict[int, np.ndarr
         by_bond.setdefault(tuple(sorted((d[1], d[2]))), []).append(d)
 
     doubles = double_bonds(f)
-    methyls, rings, scans, phis, others, double = [], [], [], [], [], []
+    methyls, rings, scans, chains, phis, others, double = [], [], [], [], [], [], []
     for (j, k), diheds in by_bond.items():
         ring = _in_ring(f, j, k)
         methyl = None
@@ -254,11 +307,17 @@ def classify_flex(f: Features, flex: np.ndarray, eq: Optional[Dict[int, np.ndarr
                 phis.append(_scan_choice(f, diheds))
         elif not ring and _joins_rigid_units(f, j, k):
             scans.append(_scan_choice(f, diheds))
+        elif not ring and _starts_side_chain(f, j, k):
+            chains.append(_scan_choice(f, diheds))
         else:
             others.extend(diheds)
 
-    scans, scan_labels = _numbered(scans, 'delta', eq)
-    phis, phi_labels = _numbered(phis, 'phi', eq)
+    scans = _carried_over(f, scans, by_bond, eq)
+    chains = _carried_over(f, chains, by_bond, eq)
+    scans, scan_labels, following = _numbered(scans, 'delta', eq)
+    chains, chain_labels, _ = _numbered(chains, 'delta', eq, following)
+    scans, scan_labels = scans + chains, scan_labels + chain_labels
+    phis, phi_labels, _ = _numbered(phis, 'phi', eq)
     rows = methyls + rings + scans + phis + others
     labels = ['methyls'] * len(methyls) + [RING_LABEL] * len(rings) + scan_labels + phi_labels \
         + [OTHER_LABEL] * len(others)

@@ -121,7 +121,7 @@ def test_methyl_rotors_take_literature_parameters_and_scans_one_dihedral(example
     f, data = features(examples / "D18" / "D18.xyz")
     flex = data[4]
     plan = classify_flex(f, flex, same_atoms(f, data[0]))
-    assert plan.counts == {"methyl": 36, "ring": 0, "scan": 5, "phi": 0, "double": 0, "other": 24}
+    assert plan.counts == {"methyl": 36, "ring": 0, "scan": 9, "phi": 0, "double": 0, "other": 0}
     # every dihedral kept was a flexible one
     assert {tuple(d) for d in plan.flex.tolist()} <= {tuple(d) for d in np.asarray(flex).tolist()}
     assert len(plan.labels) == len(plan.params) == len(plan.flex)
@@ -197,13 +197,78 @@ def test_retinal_chain_gets_the_deltas_and_phis_of_the_hand_made_topology():
     assert sorted({l for l in plan.labels if l.startswith("phi")}) == ["phi1", "phi2", "phi3", "phi4", "phi5"]
 
 
+ZR1_DELTAS = {
+    "delta1": {(2, 1, 19, 23), (5, 4, 24, 28)},        # core - phenyl
+    "delta2": {(10, 11, 29, 33), (16, 17, 34, 38)},    # core - thiophene
+    "delta3": {(32, 31, 39, 43), (37, 36, 44, 48)},    # thiophene - thiophene
+    "delta4": {(42, 41, 49, 50), (47, 46, 57, 58)},    # thiophene - rhodanine
+    "delta5": {(27, 26, 82, 101), (22, 21, 79, 97)},   # phenyl - CH2 of the ethyl
+    "delta6": {(33, 32, 85, 105), (38, 37, 88, 109)},  # thiophene - CH2 of the ethyl
+    "delta7": {(52, 54, 91, 117), (60, 62, 94, 113)},  # rhodanine N - CH2 of the ethyl
+}
+
+
 def test_zr1_scans_and_exocyclic_double_bonds_match_the_hand_made_topology():
-    """ZR1 Step1: delta1-4 are these dihedrals, and the C=C bonds joined to a ring are stiff."""
+    """ZR1 Step1: delta1-7 are these dihedrals (junctions first, then the first bond of each side chain), the methyl rotations come before them, and the C=C bonds joined to a ring are stiff."""
     f, plan = plan_of(DATA / "ZR1.xyz")
-    assert {(2, 1, 19, 23), (10, 11, 29, 33), (32, 31, 39, 43), (42, 41, 49, 50)} <= set(by_label(plan, "delta"))
+    canon = lambda d: min(d, d[::-1])
+    for label, dihedrals in ZR1_DELTAS.items():
+        mine = {canon(tuple(int(i) + 1 for i in d)) for d, l in zip(plan.flex, plan.labels) if l == label}
+        assert mine == {canon(d) for d in dihedrals}, label
+    assert plan.counts["methyl"] == 54 and plan.counts["other"] == 0 and plan.counts["scan"] == 14
+    # methyls first, then the deltas in order
+    first_delta = next(n for n, l in enumerate(plan.labels) if l.startswith("delta"))
+    assert set(plan.labels[:first_delta]) == {"methyls"}
     stiff = {tuple(int(i) + 1 for i in d) for d in plan.double}
     assert {(41, 49, 50, 51), (41, 49, 50, 55), (77, 49, 50, 51), (77, 49, 50, 55)} <= stiff
     assert plan.counts["phi"] == 0
+
+
+def side_chain_molecule(kind):
+    """A benzene ring (atoms 0-5) with a substituent on atom 0: ethyl, S-methyl or CF3."""
+    ring_xyz = ring((0.0, 0.0))
+    if kind == "ethyl":
+        extra = [[2.9, 0.0, 0.0], [3.4, 1.45, 0.0], [3.3, -0.5, 0.9], [3.3, -0.5, -0.9]]
+        elements = ["C"] * 6 + ["C", "C", "H", "H"]
+        bonds = [(0, 6), (6, 7), (6, 8), (6, 9)]
+        far = [7, 8, 9]
+    elif kind == "thioether":
+        extra = [[3.15, 0.0, 0.0], [3.9, 1.5, 0.0]]
+        elements = ["C"] * 6 + ["S", "C"]
+        bonds = [(0, 6), (6, 7)]
+        far = [7]
+    else:
+        extra = [[2.9, 0.0, 0.0], [3.4, 1.1, 0.0], [3.4, -0.55, 0.95], [3.4, -0.55, -0.95]]
+        elements = ["C"] * 6 + ["C", "F", "F", "F"]
+        bonds = [(0, 6), (6, 7), (6, 8), (6, 9)]
+        far = [7, 8, 9]
+    bonds = [(i, (i + 1) % 6) for i in range(6)] + bonds
+    f = Features(elements, np.vstack([ring_xyz, extra]), np.array(bonds))
+    return f, np.array([[i, 0, 6, l] for i in (1, 5) for l in far])
+
+
+@pytest.mark.parametrize("kind", ["ethyl", "thioether"])
+def test_the_first_bond_of_a_side_chain_is_scanned(kind):
+    f, dih = side_chain_molecule(kind)
+    plan = classify_flex(f, dih)
+    assert plan.labels == ["delta1"] and plan.counts["scan"] == 1 and plan.counts["other"] == 0
+    # the dihedral runs over the ring carbon and the heavy atom beyond the first atom of the chain
+    assert tuple(plan.flex[0])[1:3] == (0, 6) and f.el[plan.flex[0][3]] == "C" and f.el[plan.flex[0][0]] == "C"
+
+
+def test_a_group_that_turns_as_a_unit_is_not_a_side_chain_scan():
+    f, dih = side_chain_molecule("cf3")
+    plan = classify_flex(f, dih)
+    assert plan.counts["scan"] == 0 and plan.counts["other"] == len(dih)
+
+
+def test_equivalent_bonds_take_the_same_dihedral(examples):
+    # the two ethyls of BTBT: the dihedral of the second is the symmetry image of the first
+    f, data = features(examples / "BTBT" / "BTBT.xyz")
+    plan = classify_flex(f, data[4], same_atoms(f, data[0]))
+    assert plan.counts["scan"] == 2 and sorted({l for l in plan.labels if l.startswith("delta")}) == ["delta1"]
+    (a, b) = [tuple(int(i) for i in d) for d, l in zip(plan.flex, plan.labels) if l == "delta1"]
+    assert [f.el[i] for i in a] == [f.el[i] for i in b] and [f.n_h(i) for i in a] == [f.n_h(i) for i in b]
 
 
 def test_ring_locking_the_retinal_chain_is_a_cyclohexene():

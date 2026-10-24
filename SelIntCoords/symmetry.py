@@ -235,12 +235,12 @@ def _refine(adj: Sequence[Sequence[int]], c1: List[int], c2: List[int]):
         k = len(ids)
 
 
-def _extend(adj, c1: List[int], c2: List[int]) -> bool:
-    '''Whether the colourings c1 -> c2 are mapped onto each other by an automorphism of the graph.'''
+def _extend(adj, c1: List[int], c2: List[int]) -> Optional[Dict[int, int]]:
+    '''The automorphism of the graph that maps the colouring c1 onto c2 (atom -> image), or None.'''
 
     refined = _refine(adj, c1, c2)
     if refined is None:
-        return False
+        return None
     c1, c2 = refined
     n = len(c1)
     by1, by2 = {}, {}
@@ -250,26 +250,35 @@ def _extend(adj, c1: List[int], c2: List[int]) -> bool:
     open_labels = [ k for k, v in by1.items() if len(v) > 1 ]
     if not open_labels:
         image = { by1[k][0] : by2[k][0] for k in by1 }
-        return all(sorted(image[w] for w in adj[v]) == sorted(adj[image[v]]) for v in range(n))
+        if all(sorted(image[w] for w in adj[v]) == sorted(adj[image[v]]) for v in range(n)):
+            return image
+        return None
     label = min(open_labels, key=lambda k: (len(by1[k]), k))
     new = max(c1) + 1
     x = by1[label][0]
     for y in by2[label]:
         d1, d2 = list(c1), list(c2)
         d1[x], d2[y] = new, new
-        if _extend(adj, d1, d2):
-            return True
-    return False
+        image = _extend(adj, d1, d2)
+        if image is not None:
+            return image
+    return None
 
 
-def automorphism_exists(adj, colours: Sequence[int], sources: Sequence[int], targets: Sequence[int]) -> bool:
-    '''Whether an automorphism that keeps the colours sends the atoms `sources` onto `targets`, in order.'''
+def automorphism_map(adj, colours: Sequence[int], sources: Sequence[int], targets: Sequence[int]) -> Optional[Dict[int, int]]:
+    '''An automorphism that keeps the colours and sends the atoms `sources` onto `targets`, in order (atom -> image), or None.'''
 
     c1, c2 = list(colours), list(colours)
     top = max(colours) + 1
     for k, (s, t) in enumerate(zip(sources, targets)):
         c1[s], c2[t] = top + k, top + k
     return _extend(adj, c1, c2)
+
+
+def automorphism_exists(adj, colours: Sequence[int], sources: Sequence[int], targets: Sequence[int]) -> bool:
+    '''Whether an automorphism that keeps the colours sends the atoms `sources` onto `targets`, in order.'''
+
+    return automorphism_map(adj, colours, sources, targets) is not None
 
 
 def atom_orbits(graph: nx.Graph, colours: Sequence[int], atoms: Optional[Set[int]] = None) -> List[np.ndarray]:

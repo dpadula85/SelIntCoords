@@ -160,7 +160,8 @@ hand:
 | single bond between two rigid units (rings, sp2 atoms, azo N), directly or through sp3 linker atoms (ring-ring, ring-C=O, ring-O-CH2-CH2-ring) | `; delta1`, `; delta2`...: one dihedral per bond, the one over the sp2 carbons when there is a choice, with a single `n = 2` term; equivalent bonds share the header |
 | double bond with no atom in a ring (the chain of a retinal) | `; phi1`, `; phi2`...: the same as a `delta`, for a bond that is double |
 | double bond with an atom in a ring (exocyclic C=C, C=N joining two rigid units) | all its dihedrals join the stiff ones |
-| anything else (a side chain whose far end has no ring or sp2 atom, Si methyls) | `; flexible (merge or by hand)`: zero parameters, left to `oligomer_builder` or to you |
+| first bond of a side chain: from a rigid unit to an sp3 atom with a heavy atom beyond it (aryl-S-CH3, ring-CH2-CH3, N-CH2-CH3) | `; delta<N>`, numbered after the bonds between rigid units (`delta5`-`delta7` in ZR1): one dihedral per bond, the one over the heavy atoms; equivalent bonds share the header and the same dihedral, carried from one to the other by a symmetry of the bond graph |
+| anything else (the bonds of a side chain beyond the first, a group that turns as a unit such as CF3 or tert-butyl, Si methyls) | `; flexible (merge or by hand)`: zero parameters, left to `oligomer_builder` or to you |
 
 The value 0.651 kJ/mol is 0.1556 kcal/mol, the GAFF barrier of `X-c3-c3-X` (Wang
 et al., [J. Comput. Chem. 2004, 25, 1157](https://doi.org/10.1002/jcc.20035)); the
@@ -403,7 +404,7 @@ examples README lists the number of terms found for each.
 |---|---|
 | `sel_intcoords.py` | enumerate internal coordinates; symmetry and ring equivalences |
 | `dihed_deps.py` | group stiff ring dihedrals that share a force constant |
-| `symmetry.py` | atoms equivalent by symmetry operations (no point-group program); equivalence by connectivity |
+| `symmetry.py` | atoms equivalent by the symmetry of the bond graph (what `make_top` uses), and by the point group of a geometry (a library function, no external program) |
 | `ring_groups.py` | ring systems, their names, and the grouping of coordinates under headers |
 | `flex_classes.py` | kind of each rotatable bond: methyl, scanned single bond, double bond, other |
 | `mol_features.py`, `oplsaa_rules.py`, `learned_types.py`, `ffdb.py`, `extra_types.py`, `perceive_types.py` | [atom type perception](#atom-type-perception) |

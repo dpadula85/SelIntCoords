@@ -73,7 +73,7 @@ def test_make_top_cli_with_symmetry(examples, tmp_path):
                     "-m", str(examples / "BTBT" / "BTBT.xyz"), "-o", str(out)], check=True)
     assert out.exists() and (tmp_path / "BTBT_symm_deps.dat").exists()
     csv = (tmp_path / "BTBT_symm.csv").read_text()
-    assert '"Bonds",39,1,39' in csv and '"Flex_dihedrals",30,156,185' in csv
+    assert '"Bonds",39,1,39' in csv and '"Flex_dihedrals",20,156,175' in csv
 
 
 def _brute_force_deps(coords, eqs):

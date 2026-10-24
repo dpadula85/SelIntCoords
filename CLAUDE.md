@@ -88,10 +88,8 @@ oligomers/polymers.
   torsions from GAFF; ZR1/Y6/ISOTIPS_PN/retinal files carry it; older D18/PBDTTT-O
   files have Joyce-fitted 4.128/5.381, not used); on an sp3 C all neighbours
   of a methyl are kept, on sp2/N/O/S one heavy neighbour. Single bond between
-  two rigid units (rings, sp2, azo N) directly or through sp3 linker atoms (ether, ethylene) -> `delta<N>`; double bond with no ring atom -> `phi<N>`; a side chain whose far end has no ring or sp2 atom stays unclassified
-  (retinal chain), each one dihedral (sp2 carbons preferred), `n = 2`
-  placeholder as in his Step1 files, header shared by atoms of the same
-  connectivity class (`symmetry.topological_classes`). Double bonds =
+  two rigid units (rings, sp2, azo N) directly or through sp3 linker atoms (ether, ethylene) -> `delta<N>`; the first bond of a side chain (rigid atom to an sp3 atom with 1-2 heavy atoms beyond it: aryl-S-CH3, ring-CH2-CH3, N-CH2-CH3; not CF3/tBu) -> `delta<N>` numbered after those, as ZR1 d5-d7 (checked: all 14 scanned dihedrals of ZR1 d1-d7 equal his, the 54 methyl dihedrals too); double bond with no ring atom -> `phi<N>`; order in the file: methyls, ring torsions, deltas, phis, others. Each scanned rotor keeps one dihedral (sp2 carbons preferred, a C with an H over one without), `n = 2`
+  placeholder as in his Step1 files; equivalent bonds (graph symmetry, `symmetry.topological_classes`) share the header and the dihedral of the first one carried over by an automorphism (`symmetry.automorphism_map`). The bonds of a side chain beyond the first stay unclassified. Double bonds =
   shortest candidate at each atom below 0.92 x covalent radii sum. Double bond
   with an atom in a ring (exocyclic, ZR1/Y6) -> all its dihedrals join the stiff
   ones; others keep null parameters under `flexible (merge or by hand)`.
@@ -236,8 +234,8 @@ a `Fragment`.
 ## Dependencies
 
 MDAnalysis 2.7.0, networkx 3.2.1, numpy 1.26.4, pandas 2.2.1, scipy
-(`requirements.txt`). No psi4, no pyscf: the symmetry-equivalent atoms come
-from `symmetry.py` (numpy + scipy KD-tree).
+(`requirements.txt`). No psi4, no pyscf: the equivalent atoms come from the symmetry
+of the bond graph (`symmetry.py`, numpy + networkx; the point-group search there needs the scipy KD-tree).
 `perceive_types` needs a GROMACS `top` database on disk (no new Python
 dependency; `rdkit` only in the tests extra, for the SMILES-built cases).
 `openmm` is required only by `openmm_compat.py`, documented here rather
