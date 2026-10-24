@@ -28,7 +28,7 @@ oligomers/polymers.
   — the main Joyce3-prep tool. Reads a minimal `.top` (atom types/atoms,
   no bonded terms) + an `.xyz` with matching atom order; guesses bonds via
   MDAnalysis, builds a NetworkX connectivity graph, enumerates
-  bonds/angles/proper(stiff+flexible)/improper dihedrals/LJ 1,4-1,7+pairs/
+  bonds/angles/proper(stiff+flexible)/improper dihedrals/the LJ pairs that bump (see `pair_selection.py`)/
   exclusions, detects the symmetry-equivalent atoms (`symmetry.py`: operations
   mapping the geometry onto itself within 0.01 A, orbits of their group; no psi4/pyscf) and local/ring symmetry
   equivalence (`dihed_deps.py`). Writes: the completed `.top`, a
@@ -98,6 +98,20 @@ oligomers/polymers.
   loop otherwise). Checked against ZR1 (bonds, angles identical to his Step1; the four `delta`
   dihedrals and the exocyclic C=C stiff ones equal his) and the 11-cis retinal PSB
   (his delta1-5 and phi1-5 quadruplets, tests/data).
+- `make_top` pair selection (`pair_selection.py`, `--pair-ratio` 0.8, `--pair-fraction` 0.01): rigid-rotor
+  conformers (rotors = bridges that are not double bonds and end on no terminal atom, smaller side turns;
+  400 Metropolis chains stepped together as NumPy arrays, 20000 conformers per round). A 1,5+ pair joins the
+  set when it is below 0.8 sigma_ij (mixing-rule sigma) in at least 1 % of the conformers allowed by the set
+  so far; any bump between two ring systems adds all their heavy pairs; repeat until stable (empty start,
+  2-3 rounds); pairs in one orbit of the bond-graph automorphisms (atom colour = element + atomtype name,
+  compared never read; individualisation-refinement, no group listing) are written together. Written:
+  heavy-heavy and H...H only; H-heavy pairs are hard spheres but not written; 1,4 never. Everything else is
+  commented after the written pairs with its closest approach / sigma. Without `pair_selection` `add_terms`
+  writes every pair. Compared with joyce_autoval on trans (azo dye, `tests/data/DAB.xyz`): 207 pairs, 171 of
+  autoval's 201 heavy/H...H (85 %); misses one ring pair seen only in MM scans (bending). Retinals: 36-63
+  pairs against ~200 in his hand lists, which were chosen by scan relevance (not a reference). Cost
+  ~ atoms x candidate pairs (trans 8 s, ZR1 15 s, 254-atom oligomer ~5 min with ~2500 pairs from ring blocks: meant for monomers and
+  cores). Not validated beyond that; other force fields and charged species untested.
 - `map_atoms -r reference.xyz -t target.xyz [-m map.txt] [-o reordered.xyz] [-v]`
   — graph-isomorphism + Kabsch-RMSD atom correspondence between two XYZ
   structures of the same molecule with different atom orderings.

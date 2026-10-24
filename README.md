@@ -82,10 +82,52 @@ report `BTBT.types`. With `-o X.top` they are `X.top`, `X.csv`, `X_deps.dat`,
 `X.types`. When you give `-p`, nothing is perceived, your atom types are used as
 they are, and the topology is `BTBT.new.top` (there is an older one to tell it from).
 
-`-l` picks the mixing rule for the 1-4 pair parameters: geometric (default)
+`-l` picks the mixing rule for the pair parameters: geometric (default)
 or arithmetic. Output, next to `-o`: the topology, a `_deps.dat` in Joyce's
 `$dependence` format, and a `.csv` with the number of each term and its
 index range in the topology.
+
+### Which pairs are written
+
+A topology made for Joyce excludes every non-bonded pair inside the molecule, so two atoms without a
+`[ pairs ]` line pass through each other. `make_top` writes a pair when some conformer of the molecule
+brings it too close. The conformers are those of a rigid-rotor model: bond lengths, angles, rings and
+double bonds stay as they are, and only the single bonds that split the molecule turn (methyl rotors
+included). The selection does by computer what is done by hand: twist the molecule, see what collides,
+add the pair, twist again.
+
+1. Start with no pairs. Draw random conformers in which the pairs chosen so far are hard spheres.
+2. A pair that comes closer than 0.8 sigma (`--pair-ratio`) in at least 1 % of them
+   (`--pair-fraction`) is added.
+3. If any pair between two ring systems bumps even once, every heavy-atom pair between the two systems
+   is added (a stacking contact).
+4. Repeat until nothing is added. Pairs that a symmetry of the bond graph maps onto each other are
+   written together.
+
+Only heavy-heavy and H...H pairs that are 1,5 or farther apart are written. Hydrogen-heavy pairs act as
+hard spheres in the sampling but are not written, and 1,4 pairs are covered by the dihedral. The pair
+parameters are the mixing-rule values, unscaled. Every pair not written is listed commented out after
+the written ones, with its closest approach in units of sigma, so that one can be uncommented by hand.
+
+| molecule | atoms | pairs written | `make_top` time |
+|---|---|---|---|
+| BTBT | 36 | 12 | 3 s |
+| trans azo dye (`tests/data/DAB.xyz`) | 52 | 207 | 8 s |
+| D18 monomer | 87 | 109 | 8 s |
+| ZR1 | 120 | 182 | 15 s |
+
+The cost grows with the number of atoms and of 1,5-or-farther pairs. A 254-atom oligomer takes about
+5 minutes and gets about 2500 pairs, because in a flexible chain every ring can touch every other ring
+and a ring contact brings in all the pairs of the two rings: the selection is meant for monomers and
+cores, not oligomers.
+
+**What was checked.** On the trans azo dye, joyce_autoval starts from 26 pairs and adds about 205 after
+its hot MD and relaxed scans. The selection, from an empty list and without MD, contains 171 of the 201
+heavy-heavy and H...H pairs of that final list (85 %) and 36 that autoval did not add. The pairs it
+misses are one ring pair that autoval found only in the relaxed MM scans, where bonds and angles bend: a
+rigid-rotor model cannot bring those two rings together. This is one molecule, not a systematic
+validation. For retinals the selection gives 36-63 pairs against about 200 in hand-made topologies,
+which were chosen for the torsional scans they affect and not only for contacts.
 
 ### Grouping by ring system
 

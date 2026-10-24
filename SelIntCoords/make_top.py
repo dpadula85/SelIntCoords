@@ -22,7 +22,9 @@ from .sel_intcoords import list_intcoords, flip_bigger, flatten
 from .perceive_types import (add_atomtype_comments, add_perception_args, atomtype_comments,
                              mark_missing_parameters, perceive_to_top)
 from .mol_features import Features
-from .flex_classes import classify_flex
+from .flex_classes import classify_flex, double_bonds
+from .pair_selection import (BUMP_RATIO, FRACTION, append_commented_pairs, find_rotors,
+                             format_commented_pair, select_pairs)
 from .ring_groups import RingGrouper, insert_headers
 from .symmetry import topological_classes
 from .dihed_deps import (
@@ -122,6 +124,27 @@ def options():
 
     add_perception_args(parser)
 
+    sel = parser.add_argument_group("Pair selection")
+
+    sel.add_argument(
+            '--pair-ratio',
+            type=float,
+            default=BUMP_RATIO,
+            dest='PairRatio',
+            help='''A 1,5-or-farther pair bumps when it comes closer than this fraction of its
+                    Lennard-Jones sigma in a conformer of the rigid-rotor model.'''
+        )
+
+    sel.add_argument(
+            '--pair-fraction',
+            type=float,
+            default=FRACTION,
+            dest='PairFraction',
+            help='''A pair is written when it bumps in at least this fraction of the sampled
+                    conformers; the pairs between two ring systems come together as soon as one
+                    bumps once.'''
+        )
+
     #
     # Outut Options
     #
@@ -217,7 +240,8 @@ def add_terms(
         LJs=None,
         excls=None,
         mixing=geom_avg_mixing,
-        flex_params=None
+        flex_params=None,
+        pair_selection=None
     ):
     '''
     Append bonded terms and 1-n Lennard-Jones pairs, all with zero
@@ -240,6 +264,12 @@ def add_terms(
     flex_params: list of dict.
         `{'delta': , 'kchi': , 'n': }` of each flexible dihedral; null
         parameters with `n = 3` when omitted.
+    pair_selection: dict, optional.
+        `graph`, `coords` (Angstrom), `rotors`, `elements`, `ratio` and `fraction` for
+        `pair_selection.select_pairs`. When given, only the pairs that it selects are
+        written, and the others are kept in `topobj.commented_pairs` for
+        `append_commented_pairs`; 1,4 pairs are never written. When omitted, every pair is
+        added.
 
     Returns
     -------
@@ -327,35 +357,64 @@ def add_terms(
         topobj.molecules[0].dihedrals.append(dih)
         counter += 1
 
-    # Add LJs
+    # Add LJs. The pairs that bump in the rigid-rotor conformers are written (pair_selection.py); the others are
+    # listed, commented out, after them
+    pairs = []
     for k, v in LJs.items():
         for pair in v:
             ai, aj = pair
-            ei = nb_params[ai]['epsilon']
-            si = nb_params[ai]['sigma']
+            eij, sij = mixing(nb_params[ai]['epsilon'], nb_params[aj]['epsilon'],
+                              nb_params[ai]['sigma'], nb_params[aj]['sigma'])
+            pairs.append((k, int(ai), int(aj), eij, sij))
 
-            ej = nb_params[aj]['epsilon']
-            sj = nb_params[aj]['sigma']
+    closest = {}
+    written = None
+    if pair_selection is not None:
+        candidates = [ (k, ai, aj, sij) for k, ai, aj, eij, sij in pairs if k != '1,4' ]
+        atoms = topobj.molecules[0].atoms
+        elements = pair_selection['elements']
+        labels = [ (elements[i], atoms[i].atomtype) for i in range(len(atoms)) ]
+        colours = [ sorted(set(labels)).index(label) for label in labels ]
+        result = select_pairs(
+                pair_selection['graph'],
+                pair_selection['coords'],
+                pair_selection['rotors'],
+                np.array([ (ai, aj) for k, ai, aj, sij in candidates ], dtype=int),
+                np.array([ sij for k, ai, aj, sij in candidates ]),
+                [ el == 'H' for el in elements ],
+                colours,
+                ratio=pair_selection['ratio'],
+                fraction=pair_selection['fraction']
+            )
+        written = set(result.written)
+        closest = result.closest
 
-            eij, sij = mixing(ei, ej, si, sj)
+    topobj.pair_counts = { k : 0 for k in LJs }
+    topobj.commented_pairs = []
+    for k, ai, aj, eij, sij in pairs:
+        key = (min(ai, aj), max(ai, aj))
+        if written is not None and key not in written:
+            topobj.commented_pairs.append((closest.get(key), ai, aj, eij, sij, k))
+            continue
 
-            nb = blocks.InteractionType('gromacs')
-            nb.atom1 = topobj.molecules[0].atoms[ai]
-            nb.atom2 = topobj.molecules[0].atoms[aj]
-            nb.gromacs = {
-                    'param': {
-                        'lje': None,
-                        'ljl':None,
-                        'lje14': eij,
-                        'ljl14': sij,
-                        'QQ': 1.000,
-                        'qi': 0.000,
-                        'qj': 0.000
-                        },
-                    'func': 2
-                    }
-            topobj.molecules[0].pairs.append(nb)
-            counter += 1
+        nb = blocks.InteractionType('gromacs')
+        nb.atom1 = topobj.molecules[0].atoms[ai]
+        nb.atom2 = topobj.molecules[0].atoms[aj]
+        nb.gromacs = {
+                'param': {
+                    'lje': None,
+                    'ljl':None,
+                    'lje14': eij,
+                    'ljl14': sij,
+                    'QQ': 1.000,
+                    'qi': 0.000,
+                    'qj': 0.000
+                    },
+                'func': 2
+            }
+        topobj.molecules[0].pairs.append(nb)
+        topobj.pair_counts[k] += 1
+        counter += 1
 
     # Add exclusions
     for excl in excls:
@@ -549,7 +608,15 @@ def main():
             LJs,
             excls,
             mixing=Opts["MixingRule"],
-            flex_params=plan.params
+            flex_params=plan.params,
+            pair_selection=dict(
+                    graph=feats.graph,
+                    coords=feats.pos,
+                    rotors=find_rotors(feats.graph, double_bonds(feats)),
+                    elements=feats.el,
+                    ratio=Opts['PairRatio'],
+                    fraction=Opts['PairFraction']
+                )
         )
 
     if tmpdir is not None:
@@ -558,6 +625,13 @@ def main():
     # Write topology (unchanged)
     topobj.write(outfile)
     insert_headers(outfile, headers)
+    reason = [
+            '; written: 1,5 or farther apart, heavy-heavy or H...H, that come closer than %.2f sigma in conformers of' % Opts['PairRatio'],
+            '; rigid rotors (in at least %g of them, --pair-fraction), the pairs between two ring systems once one does,' % Opts['PairFraction'],
+            '; and the pairs equivalent to those by symmetry; the others are commented below'
+        ]
+    append_commented_pairs(outfile, [ format_commented_pair(ai, aj, eij, sij, ratio, k)
+                                      for ratio, ai, aj, eij, sij, k in topobj.commented_pairs ], reason)
     if type_comments:
         add_atomtype_comments(outfile, type_comments)
     missing = {a.element for a in assign if a.source == 'placeholder'}
@@ -585,11 +659,11 @@ def main():
                 stiff.shape[0],
                 impdiheds.shape[0],
                 flex.shape[0],
-                LJs['1,4'].shape[0],
-                LJs['1,5'].shape[0],
-                LJs['1,6'].shape[0],
-                LJs['1,7'].shape[0],
-                LJs['other'].shape[0],
+                topobj.pair_counts['1,4'],
+                topobj.pair_counts['1,5'],
+                topobj.pair_counts['1,6'],
+                topobj.pair_counts['1,7'],
+                topobj.pair_counts['other'],
             ]
         })
 
