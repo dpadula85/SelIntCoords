@@ -144,10 +144,10 @@ the later sections of this README give the details.
 4. **One reference per class.** Ties chain together into classes; the coordinate with the lowest number is
    the reference and every other member is tied to it, once.
 
-Rule 2 is there because the six torsions of a planar ring are not independent at the harmonic level (the
-Hessian fixes only their collective out-of-plane stiffness), so fitted separately Joyce splits it with arbitrary
-signs. On MphS-C2, Step1 with the symmetry ties alone gave 27 of 168 stiff force constants below zero (down to
--171 kJ/mol); with the ring ties none, range 11-430 kJ/mol, and the Hessian deviation 1 % higher.
+Rule 2 is there because the six torsions of a planar ring are not independent at the harmonic level: the
+Hessian fixes only their collective out-of-plane stiffness. Fitted separately, Joyce splits it between them
+with arbitrary signs, and force constants below zero appear, which a torsion that keeps a ring planar should
+never have. One parameter per ring leaves a single, well-determined number.
 
 Each line ends with a `;` comment saying what is tied and why:
 
@@ -232,7 +232,7 @@ hand:
 | single bond between two rigid units (rings, sp2 atoms, azo N), directly or through sp3 linker atoms (ring-ring, ring-C=O, ring-O-CH2-CH2-ring) | `; delta1`, `; delta2`...: one dihedral per bond, the one over the sp2 carbons when there is a choice, with a single `n = 2` term; equivalent bonds share the header |
 | double bond with no atom in a ring (the chain of a retinal) | `; phi1`, `; phi2`...: the same as a `delta`, for a bond that is double |
 | double bond with an atom in a ring (exocyclic C=C, C=N joining two rigid units) | all its dihedrals join the stiff ones |
-| first bond of a side chain: from a rigid unit to an sp3 atom with a heavy atom beyond it (aryl-S-CH3, ring-CH2-CH3, N-CH2-CH3) | `; delta<N>`, numbered after the bonds between rigid units (`delta5`-`delta7` in ZR1): one dihedral per bond, the one over the heavy atoms; equivalent bonds share the header and the same dihedral, carried from one to the other by a symmetry of the bond graph |
+| first bond of a side chain: from a rigid unit to an sp3 atom with a heavy atom beyond it (aryl-S-CH3, ring-CH2-CH3, N-CH2-CH3) | `; delta<N>`, numbered after the bonds between rigid units: one dihedral per bond, the one over the heavy atoms; equivalent bonds share the header and the same dihedral, carried from one to the other by a symmetry of the bond graph |
 | anything else (the bonds of a side chain beyond the first, a group that turns as a unit such as CF3 or tert-butyl, Si methyls) | `; flexible (merge or by hand)`: zero parameters, left to `oligomer_builder` or to you |
 
 The value 0.651 kJ/mol is 0.1556 kcal/mol, the GAFF barrier of `X-c3-c3-X` (Wang
