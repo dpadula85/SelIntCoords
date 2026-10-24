@@ -85,8 +85,8 @@ they are, and the topology is `BTBT.new.top` (there is an older one to tell it f
 
 `-l` picks the mixing rule for the pair parameters: geometric (default)
 or arithmetic. Output, next to `-o`: the topology, a `_deps.dat` in Joyce's
-`$dependence` format, and a `.csv` with the number of each term and its
-index range in the topology.
+`$dependence` format (each coordinate is tied once, to the lowest index of its class of equivalent coordinates), and a `.csv` with the
+number of each term and its index range in the topology.
 
 ### Which pairs are written
 

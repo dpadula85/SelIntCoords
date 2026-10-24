@@ -718,23 +718,27 @@ def main():
             except:
                 deps = arr
 
-    # Filter out redundancies (unchanged)
+    # Equivalent coordinates form classes (union-find over the pairs); the lowest index of a class is the
+    # reference and every other member depends on it, once
+    parent = {}
+
+    def root(x):
+        parent.setdefault(x, x)
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for a, b in deps:
+        a, b = root(int(a)), root(int(b))
+        if a != b:
+            parent[max(a, b)] = min(a, b)
+
     deps_dict = {}
-    for dep in deps:
-        done = False
-        for k, v in deps_dict.items():
-            if (dep[1] in v or dep[0] in v) or (dep[0] == k or dep[1] == k):
-                deps_dict[k].extend(dep)
-                done = True
-
-        if not done:
-            deps_dict[dep[0]] = [ dep[1] ]
-
-    # Remove self-equivalence
-    for k, v in deps_dict.items():
-        v = np.asarray(v, dtype=int)
-        v = v[v != k]
-        deps_dict[k] = np.sort(np.unique(v))
+    for x in sorted(parent):
+        if root(x) != x:
+            deps_dict.setdefault(root(x), []).append(x)
+    deps_dict = dict(sorted(deps_dict.items()))
 
     # Write dependencies in Joyce format
     with open(outdeps, "w") as f:

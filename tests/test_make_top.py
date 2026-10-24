@@ -2,6 +2,7 @@
 
 The counts below do not depend on the symmetry of the molecule.
 """
+import re
 import subprocess
 import sys
 
@@ -65,6 +66,20 @@ def test_find_deps_without_equivalences_is_empty():
     coords = np.array([[0, 1], [2, 3]])
     eqs = {i: [i] for i in range(4)}
     assert find_deps(coords, eqs).size == 0
+
+
+@pytest.mark.parametrize("name", ["BTBT", "DPP"])
+def test_dependence_file_ties_each_coordinate_once_to_the_lowest_of_its_class(name, examples, tmp_path):
+    out = tmp_path / f"{name}.top"
+    subprocess.run([sys.executable, "-m", "SelIntCoords.make_top", "-m", str(examples / name / f"{name}.xyz"),
+                    "-o", str(out)], check=True)
+    ties = [tuple(int(x) for x in re.findall(r"\d+", line)[:2])
+            for line in (tmp_path / f"{name}_deps.dat").read_text().split("\n") if "=" in line]
+    dependents = [a for a, _ in ties]
+    assert ties and len(set(dependents)) == len(dependents)
+    # a reference is never itself tied, and sits below everything that depends on it
+    assert not {b for _, b in ties} & set(dependents)
+    assert all(b < a for a, b in ties)
 
 
 def test_make_top_cli_with_symmetry(examples, tmp_path):

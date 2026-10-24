@@ -35,7 +35,7 @@ oligomers/polymers.
   rule and adds some on ZR1, DPP, rPSB11 where the geometry is not symmetric; his hand ties of the 11-cis retinal
   PSB are reproduced exactly; `symmetry.equivalent_atoms`, the point group within 0.01 A, stays as a library function
   that make_top no longer calls) and ring symmetry equivalence (`dihed_deps.py`). Writes: the completed `.top`, a
-  `<stem>_deps.dat` (Joyce `$dependence 1.2` format), and a
+  `<stem>_deps.dat` (Joyce `$dependence 1.2` format; union-find over equivalent coordinates, each dependent listed once against the lowest index of its class), and a
   `<stem>.csv` coordinate-count summary (columns: `Type, Number, Start,
   End`).
 - `make_top -m geometry.xyz` (no `-p`; writes `<stem>.top`, class-named atomtypes like CA1/HC, atoms named element+number, the opls type in a comment; `--ff-type-names` keeps opls_NNN) perceives the atom types inside
