@@ -16,7 +16,7 @@ from MDAnalysis.lib.util import unique_rows
 
 from chain_cropper.topology import get_sp2
 
-from .symmetry import equivalent_atoms
+from .symmetry import equivalent_atoms, graph_equivalences
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -343,7 +343,7 @@ def get_equivalent_atoms(u, tol=0.01):
     return equivalent_atoms(list(u.atoms.types), u.atoms.positions, tol)
 
 
-def list_intcoords(coordfile):
+def list_intcoords(coordfile, atom_types=None):
     '''
     Function to obtain a set of internal coordinates for force field 
     parameterisation from a geometry file.
@@ -352,6 +352,9 @@ def list_intcoords(coordfile):
     ----------
     coordfile: str.
         Name of the geometry file for which internal coordinates are required.
+    atom_types: sequence of str, optional.
+        Atom type of each atom. Atoms of different type are never equivalent; without it
+        the element decides.
 
     Returns
     -------
@@ -376,7 +379,9 @@ def list_intcoords(coordfile):
         Dictionary of rings, divided in core atoms, and core plus substituents
         (full).
     eq: dict.
-        Dictionary of equivalent atoms (by symmetry and local connectivity).
+        Dictionary of equivalent atoms: the orbits of the automorphisms of the bond graph that
+        keep the element (and the atom type), `symmetry.graph_equivalences`. Every atom is in
+        its own set.
     '''
 
     u = mda.Universe(coordfile, guess_bonds=True)
@@ -406,25 +411,19 @@ def list_intcoords(coordfile):
         'full' : frings
     }
 
-    # Get equivalent atoms and Hs
-    # This contains equivalences by symmetry
-    eq_ats = get_equivalent_atoms(u)
-
-    # This contains equivalences by connectivity, i.e. local symmetry
+    # Equivalent hydrogens (of one atom), which decide the stiff dihedrals to keep
     eq_hs = get_equivalent_hydrogens(u, G)
 
-    # Join the two equivalences
-    # I also keep self equivalence because this makes it easier to
-    # code the identification of equivalent internal coordinates
-    eq = {}
-    for k, v in sorted(eq_ats.items()):
-        try:
-            all_eqs = np.r_[ k, v, eq_hs[k] ]
-            for h in v:
-                all_eqs = np.r_[ all_eqs, eq_hs[h] ]
-            eq[k] = np.sort(all_eqs)
-        except:
-            eq[k] = np.sort(np.r_[ k, v ])
+    # Equivalent atoms: the symmetry of the bond graph, the same as is told by hand. Self
+    # equivalence is kept because this makes it easier to code the identification of
+    # equivalent internal coordinates
+    graph = nx.Graph()
+    graph.add_nodes_from(range(len(u.atoms)))
+    graph.add_edges_from(bds)
+    labels = [ str(t).capitalize() for t in u.atoms.types ]
+    if atom_types is not None:
+        labels = [ '%s:%s' % (el, at) for el, at in zip(labels, atom_types) ]
+    eq = graph_equivalences(graph, labels)
 
     # Figure out how to use equivalence to reduce internal coordinates and to
     # set up dependencies

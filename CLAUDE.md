@@ -29,9 +29,12 @@ oligomers/polymers.
   no bonded terms) + an `.xyz` with matching atom order; guesses bonds via
   MDAnalysis, builds a NetworkX connectivity graph, enumerates
   bonds/angles/proper(stiff+flexible)/improper dihedrals/the LJ pairs that bump (see `pair_selection.py`)/
-  exclusions, detects the symmetry-equivalent atoms (`symmetry.py`: operations
-  mapping the geometry onto itself within 0.01 A, orbits of their group; no psi4/pyscf) and local/ring symmetry
-  equivalence (`dihed_deps.py`). Writes: the completed `.top`, a
+  exclusions, takes the equivalent atoms from the symmetry of the bond graph (`symmetry.graph_equivalences`:
+  orbits of the automorphisms that keep element and atom type, individualisation-refinement, no group listing, no
+  geometry tolerance; on 8 example molecules it loses no dependency of the former point-group + local-hydrogen
+  rule and adds some on ZR1, DPP, rPSB11 where the geometry is not symmetric; his hand ties of the 11-cis retinal
+  PSB are reproduced exactly; `symmetry.equivalent_atoms`, the point group within 0.01 A, stays as a library function
+  that make_top no longer calls) and ring symmetry equivalence (`dihed_deps.py`). Writes: the completed `.top`, a
   `<stem>_deps.dat` (Joyce `$dependence 1.2` format), and a
   `<stem>.csv` coordinate-count summary (columns: `Type, Number, Start,
   End`).

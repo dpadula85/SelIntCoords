@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 from SelIntCoords import pair_selection as ps
+from SelIntCoords.symmetry import pair_orbit_closure
 from SelIntCoords.flex_classes import double_bonds
 from SelIntCoords.mol_features import Features
 
@@ -53,24 +54,6 @@ def test_ring_systems_merge_fused_rings():
     systems = ps.ring_systems(graph)
     assert len({systems[i] for i in (0, 1, 2, 3, 4, 5, 6, 7, 8, 9)}) == 1
     assert systems[11] != systems[0] and 16 not in systems
-
-
-def test_atom_orbits_follow_the_symmetry_and_the_colours():
-    star = nx.star_graph(3)                                              # centre 0, leaves 1-3
-    assert [o.tolist() for o in ps.atom_orbits(star, [0, 1, 1, 1])] == [[0], [1, 2, 3], [1, 2, 3], [1, 2, 3]]
-    assert [o.tolist() for o in ps.atom_orbits(star, [0, 1, 2, 1])][1] == [1, 3]
-
-
-def test_pair_orbits_are_orbits_of_pairs_not_products_of_atom_orbits():
-    # two identical arms joined at the centre: the pairs within an arm and across arms are different orbits
-    graph = nx.Graph([(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6)])   # mirror: i <-> 6 - i
-    colours = [0, 1, 2, 3, 2, 1, 0]
-    assert ps.pair_orbit_closure(graph, colours, {(0, 4)}) == {(0, 4), (2, 6)}
-    assert ps.pair_orbit_closure(graph, colours, {(0, 6)}) == {(0, 6)}
-    # a pair joining the two mirror images is not an image of a pair within one arm
-    assert (1, 5) not in ps.pair_orbit_closure(graph, colours, {(0, 4)})
-    # a lower symmetry of the colours gives smaller orbits
-    assert ps.pair_orbit_closure(graph, [0, 1, 2, 3, 2, 1, 4], {(0, 4)}) == {(0, 4)}
 
 
 def test_syn_pentane_puts_the_end_carbons_in_contact():
@@ -132,7 +115,7 @@ def test_trans_selects_about_two_hundred_pairs(trans):
 def test_trans_selection_is_closed_under_symmetry(trans):
     features, candidates, colours, hydrogen, rotors, sigma, result = trans
     written = set(result.written)
-    assert ps.pair_orbit_closure(features.graph, colours, written) & {tuple(p) for p in candidates} == written
+    assert pair_orbit_closure(features.graph, colours, written) & {tuple(p) for p in candidates} == written
 
 
 def test_trans_ring_blocks_are_complete(trans):

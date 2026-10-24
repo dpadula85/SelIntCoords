@@ -67,9 +67,10 @@ Input: a geometry. `make_top` perceives the atom type of every atom (see
 bonds, angles, proper and improper dihedrals, 1-n Lennard-Jones pairs and
 exclusions from the bond graph. Proper dihedrals are split into **stiff**
 (ring and conjugated core, near-planar) and **flexible** (rotatable side
-chains). Atoms equivalent by point-group symmetry, or by local
-connectivity (the three H of a methyl), are identified so that
-equivalent coordinates are fitted together. All new terms get zero
+chains). Atoms equivalent by the symmetry of the bond graph (the three H of
+a methyl, the two methyls of a gem-dimethyl, the two halves of a symmetric
+molecule, whatever the conformation; never atoms of different atom type) are
+identified so that equivalent coordinates are fitted together. All new terms get zero
 parameters for Joyce to fit, except the methyl rotations ([below](#rotatable-bonds)).
 
 ```bash

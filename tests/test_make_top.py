@@ -1,7 +1,6 @@
 """make_top: internal-coordinate counts for the example cores.
 
-Most tests replace the point-group detection with "no symmetry"; the counts
-below do not depend on it.
+The counts below do not depend on the symmetry of the molecule.
 """
 import subprocess
 import sys

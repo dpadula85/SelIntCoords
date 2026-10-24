@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 '''
-symmetry - atoms equivalent by the point-group symmetry of a geometry.
+symmetry - atoms equivalent by symmetry: of a geometry (point group) or of its bond graph.
 
 A geometry obtained from an optimisation is symmetric only to within the
 convergence of the optimiser, so the symmetry operations are searched
@@ -14,11 +14,16 @@ from the images of two reference atoms and each is checked on the whole
 molecule. Two atoms are equivalent when some operation maps one onto the
 other: the equivalence classes are the orbits of the group of the operations
 found, which needs no point-group table and no external program.
+
+The bond graph has symmetries of its own (`graph_equivalences`): the two methyls of a gem-dimethyl or the two
+halves of a molecule are equivalent whatever their conformations, which is how equivalent atoms are told by
+hand. The geometry plays no part, so no tolerance is needed.
 '''
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
+import networkx as nx
 import numpy as np
 from scipy.spatial import cKDTree
 
@@ -199,3 +204,144 @@ def topological_classes(elements: List[str], bonds: np.ndarray) -> np.ndarray:
             break
         n_classes = len(ids)
     return classes
+
+
+# ----------------------------------------------------------------------
+# symmetry of the bond graph (individualisation and refinement)
+#
+# Two atoms are equivalent when an automorphism of the bond graph that keeps the atom colours (element, or element
+# and atom type) sends one onto the other. This is what is done by hand (the two methyls of a gem-dimethyl, the
+# two halves of a molecule, whatever the conformation) and does not depend on a geometry being symmetric within a
+# tolerance. Colour refinement splits the atoms by the colours of their neighbours; an automorphism is then
+# searched by singling out atoms one at a time, without listing the group.
+# ----------------------------------------------------------------------
+def _refine(adj: Sequence[Sequence[int]], c1: List[int], c2: List[int]):
+    '''
+    Refine two colourings of one graph together until stable (a colour is split by the colours of the neighbours).
+    Returns the two colourings, or None when their histograms differ at some stage.
+    '''
+
+    n = len(c1)
+    k = len(set(c1))
+    while True:
+        s1 = [ (c1[v], tuple(sorted(c1[w] for w in adj[v]))) for v in range(n) ]
+        s2 = [ (c2[v], tuple(sorted(c2[w] for w in adj[v]))) for v in range(n) ]
+        if sorted(s1) != sorted(s2):
+            return None
+        ids = { s : i for i, s in enumerate(sorted(set(s1))) }
+        c1, c2 = [ ids[s] for s in s1 ], [ ids[s] for s in s2 ]
+        if len(ids) == k:
+            return c1, c2
+        k = len(ids)
+
+
+def _extend(adj, c1: List[int], c2: List[int]) -> bool:
+    '''Whether the colourings c1 -> c2 are mapped onto each other by an automorphism of the graph.'''
+
+    refined = _refine(adj, c1, c2)
+    if refined is None:
+        return False
+    c1, c2 = refined
+    n = len(c1)
+    by1, by2 = {}, {}
+    for v in range(n):
+        by1.setdefault(c1[v], []).append(v)
+        by2.setdefault(c2[v], []).append(v)
+    open_labels = [ k for k, v in by1.items() if len(v) > 1 ]
+    if not open_labels:
+        image = { by1[k][0] : by2[k][0] for k in by1 }
+        return all(sorted(image[w] for w in adj[v]) == sorted(adj[image[v]]) for v in range(n))
+    label = min(open_labels, key=lambda k: (len(by1[k]), k))
+    new = max(c1) + 1
+    x = by1[label][0]
+    for y in by2[label]:
+        d1, d2 = list(c1), list(c2)
+        d1[x], d2[y] = new, new
+        if _extend(adj, d1, d2):
+            return True
+    return False
+
+
+def automorphism_exists(adj, colours: Sequence[int], sources: Sequence[int], targets: Sequence[int]) -> bool:
+    '''Whether an automorphism that keeps the colours sends the atoms `sources` onto `targets`, in order.'''
+
+    c1, c2 = list(colours), list(colours)
+    top = max(colours) + 1
+    for k, (s, t) in enumerate(zip(sources, targets)):
+        c1[s], c2[t] = top + k, top + k
+    return _extend(adj, c1, c2)
+
+
+def atom_orbits(graph: nx.Graph, colours: Sequence[int], atoms: Optional[Set[int]] = None) -> List[np.ndarray]:
+    '''
+    Orbits of the atoms under the automorphisms of the bond graph that keep the colours; one array per atom.
+    With `atoms`, only the orbits of those atoms are found (the others are returned as they are).
+    '''
+
+    n = graph.number_of_nodes()
+    adj = [ sorted(graph.neighbors(v)) for v in range(n) ]
+    stable = _refine(adj, list(colours), list(colours))[0]
+    parent = list(range(n))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    wanted = set(range(n)) if atoms is None else set(atoms)
+    for i in sorted(wanted):
+        for j in range(n):
+            if j != i and stable[i] == stable[j] and find(i) != find(j) and automorphism_exists(adj, colours, [i], [j]):
+                parent[find(j)] = find(i)
+    roots = [ find(v) for v in range(n) ]
+    return [ np.array([ w for w in range(n) if roots[w] == roots[v] ]) for v in range(n) ]
+
+
+def pair_orbit_closure(graph: nx.Graph, colours: Sequence[int], pairs) -> Set[Tuple[int, int]]:
+    '''
+    The given pairs and every pair that a symmetry of the bond graph (colours kept) maps one of them onto.
+    Pairs are (i, j) with i < j.
+    '''
+
+    pairs = sorted(pairs)
+    if not pairs:
+        return set()
+    adj = [ sorted(graph.neighbors(v)) for v in range(graph.number_of_nodes()) ]
+    orbit = atom_orbits(graph, colours, { atom for pair in pairs for atom in pair })
+    out: Set[Tuple[int, int]] = set()
+    for i, j in pairs:
+        if (i, j) in out:
+            continue
+        out.add((i, j))
+        for k in orbit[i]:
+            for l in orbit[j]:
+                key = (int(min(k, l)), int(max(k, l)))
+                if k == l or key in out:
+                    continue
+                if automorphism_exists(adj, colours, [i, j], [k, l]) or automorphism_exists(adj, colours, [i, j], [l, k]):
+                    out.add(key)
+    return out
+
+
+
+def graph_equivalences(graph: nx.Graph, colours: Sequence) -> Dict[int, np.ndarray]:
+    '''
+    Orbits of the atoms under the automorphisms of the bond graph that keep the colours.
+
+    Parameters
+    ----------
+    graph: nx.Graph.
+        Bond graph with the atoms as nodes 0 ... N - 1.
+    colours: sequence.
+        Hashable label of each atom; atoms with different labels are never equivalent.
+
+    Returns
+    -------
+    eq: dict.
+        Atom index -> sorted array of the atoms equivalent to it, itself included.
+    '''
+
+    ids = { label : k for k, label in enumerate(sorted(set(colours), key=repr)) }
+    orbit = atom_orbits(graph, [ ids[label] for label in colours ])
+    return { i : np.sort(orbit[i]) for i in range(len(colours)) }

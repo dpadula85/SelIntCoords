@@ -563,7 +563,7 @@ def main():
                       out_stem + '_types.top'))
 
     # Get internal coordinates and other information from geometry
-    data = list_intcoords(Opts['MolFile'])
+    data = list_intcoords(Opts['MolFile'], atom_types=[ a.atomtype for a in TOP(topfile).molecules[0].atoms ])
     bds, angles, stiff, impdiheds, flex, LJs, excls, rings, eq = data
 
     # Treat each rotatable bond as done by hand: methyl rotors take literature

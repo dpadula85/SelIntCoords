@@ -32,8 +32,11 @@ Each run writes `<name>_symm.top`, `<name>_symm.csv` and
 
 ## What it produces
 
-Number of terms found (the `.csv`). For `DPP` and `PNDI2OD` the topology is
-identical (ignoring comments) to the one Joyce was started from. For `D18`
+Number of terms found (the `.csv`; its LJ rows count the pairs written). For `DPP` and `PNDI2OD` the
+bonded terms and exclusions are identical (ignoring comments) to those of the topology Joyce was
+started from. That topology listed every pair 1,5 or farther apart; `make_top` writes only the pairs
+that bump (BTBT 12, DPP 18, PNDI2OD 72) and lists the others commented out
+([which pairs](../README.md#which-pairs-are-written)). For `D18`
 and `PBDTTT-O` the bonds, angles, and stiff dihedrals plus impropers equal
 those of their final Joyce topology.
 
